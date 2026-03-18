@@ -1,6 +1,48 @@
 name: drupal-dev
 
-project_files:
-  - docker-compose.drupal-dev.yaml
+ddev_version_constraint: '>= v1.24.6'
 
-ddev_version_constraint: '>= v1.24.3'
+project_files:
+  - drupal-dev/composer.local.json
+  - drupal-dev/envrc
+  - drupal-dev/shell-helpers.sh
+  - drupal-dev/gitignore
+  - drupal-dev/composer-plugin
+  - commands/web/phpunit
+  - commands/web/add-module
+  - commands/web/update-module
+  - commands/web/remove-module
+  - docker-compose.drupal-dev-selenium.yaml
+  - config.drupal-dev.yaml
+
+post_install_actions:
+  # Copy overlay files to project root (post_install_actions run from .ddev/)
+  # Only copy composer.local.json if it doesn't exist (user may have customized it)
+  - "[ -f ../composer.local.json ] || cp drupal-dev/composer.local.json ../composer.local.json"
+  - "! [ -f ../.envrc ] || grep -q '#ddev-generated' ../.envrc && cp drupal-dev/envrc ../.envrc"
+  - "! [ -f ../.gitignore ] || grep -q '#ddev-generated' ../.gitignore && cp drupal-dev/gitignore ../.gitignore"
+  # Create test output directory
+  - mkdir -p ../test_output
+  # User-friendly post-install message
+  - |
+    printf '\n'
+    printf '\033[32m  ✅ ddev-drupal-dev installed successfully.\033[0m\n'
+    printf '\n'
+    printf '  \033[1mNext steps:\033[0m\n'
+    printf '    ddev restart\n'
+    printf '    ddev composer install\n'
+    printf '\n'
+    printf '  \033[1mHost-side shell helpers:\033[0m\n'
+    printf '  Add this to your ~/.bashrc or ~/.zshrc to auto-delegate\n'
+    printf '  composer, drush, php and phpunit to DDEV:\n'
+    printf '\n'
+    printf "    \033[36msource \"$(cd .. && pwd)/.ddev/drupal-dev/shell-helpers.sh\"\033[0m\n"
+    printf '\n'
+    printf '  Or if you use \033[1mdirenv\033[0m, run: \033[36mdirenv allow\033[0m\n'
+    printf '\n'
+
+removal_actions:
+  - "grep -q '#ddev-generated' ../composer.local.json 2>/dev/null && rm -f ../composer.local.json ../composer.local.lock || true"
+  - "grep -q '#ddev-generated' ../.envrc 2>/dev/null && rm -f ../.envrc || true"
+  - "grep -q '#ddev-generated' ../.gitignore 2>/dev/null && rm -f ../.gitignore || true"
+  - rm -rf ../test_output

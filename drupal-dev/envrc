@@ -1,0 +1,3 @@
+# #ddev-generated
+export COMPOSER=composer.local.json
+source .ddev/drupal-dev/shell-helpers.sh

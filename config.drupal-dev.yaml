@@ -1,0 +1,17 @@
+#ddev-generated
+web_environment:
+  - COMPOSER=composer.local.json
+  # Test environment
+  - SIMPLETEST_BASE_URL=http://web
+  - BROWSERTEST_OUTPUT_DIRECTORY=/var/www/html/${DDEV_DOCROOT}/test_output
+  - BROWSERTEST_OUTPUT_BASE_URL=${DDEV_PRIMARY_URL}
+  - SYMFONY_DEPRECATIONS_HELPER=ignoreFile=/var/www/html/${DDEV_DOCROOT}/core/.deprecation-ignore.txt
+  # Webdriver
+  - DRUPAL_TEST_WEBDRIVER_HOSTNAME=chrome
+  - DRUPAL_TEST_WEBDRIVER_PORT=4444
+  - DRUPAL_TEST_CHROMEDRIVER_AUTOSTART=false
+  - DRUPAL_TEST_WEBDRIVER_W3C=true
+  - MINK_DRIVER_ARGS_WEBDRIVER=[\"chrome\", {\"browserName\":\"chrome\", \"goog:chromeOptions\":{\"w3c\":true, \"args\":[\"--no-sandbox\",\"--ignore-certificate-errors\",\"--allow-insecure-localhost\"]}}, \"http://chrome:4444\"]
+  # Nightwatch
+  - DRUPAL_NIGHTWATCH_OUTPUT=test_output/nightwatch
+  - DRUPAL_NIGHTWATCH_IGNORE_DIRECTORIES=node_modules,vendor,.*,sites/*/files,sites/*/private,sites/simpletest

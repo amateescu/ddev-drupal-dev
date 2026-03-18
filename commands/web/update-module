@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Update composer constraint after switching a module's branch
+## Usage: update-module <module_name>
+## Example: "ddev update-module token"
+## ExecRaw: true
+## MutagenSync: true
+
+set -e
+
+if [ $# -eq 0 ]; then
+  echo "Usage: ddev update-module <module_name>"
+  echo ""
+  echo "Updates the composer version constraint for a module after you"
+  echo "switch its git branch. Detects the current branch, finds the"
+  echo "matching Composer dev version, and runs composer update."
+  echo ""
+  echo "Example:"
+  echo "  cd modules/contrib/token && git checkout 2.0.x && cd -"
+  echo "  ddev update-module token"
+  exit 1
+fi
+
+MODULE_NAME="$1"
+
+if [[ ! "$MODULE_NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "Error: Invalid module name '$MODULE_NAME'."
+  echo "Must start with a lowercase letter, contain only lowercase letters, numbers, and underscores."
+  exit 1
+fi
+
+# Read the install path for drupal-module from Composer's installer-paths config.
+MODULE_DIR=$(composer config extra.installer-paths --json 2>/dev/null \
+  | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null \
+  | sed "s/{\\\$name}/$MODULE_NAME/")
+if [ -z "$MODULE_DIR" ]; then
+  MODULE_DIR="modules/contrib/$MODULE_NAME"
+fi
+
+if [ ! -d "$MODULE_DIR/.git" ]; then
+  echo "Error: $MODULE_DIR is not a git checkout."
+  echo "Use 'ddev add-module $MODULE_NAME' to clone it first."
+  exit 1
+fi
+
+# Read the current branch.
+BRANCH=$(cd "$MODULE_DIR" && git symbolic-ref --short HEAD 2>/dev/null)
+if [ -z "$BRANCH" ]; then
+  echo "Error: $MODULE_DIR is in a detached HEAD state."
+  echo "Check out a branch first: cd $MODULE_DIR && git checkout <branch>"
+  exit 1
+fi
+
+# Find the dev version from the canonical Drupal Composer repo that matches
+# the current branch.
+DEV_VERSIONS=$(composer show --all "drupal/$MODULE_NAME" --format=json 2>/dev/null \
+  | jq -r '.versions[]' 2>/dev/null | grep -E '\-dev$|^dev-' || true)
+COMPOSER_VERSION=""
+# Try direct match: 2.0.x → 2.0.x-dev
+if echo "$DEV_VERSIONS" | grep -qx "${BRANCH}-dev"; then
+  COMPOSER_VERSION="${BRANCH}-dev"
+# Try dev- prefix: main → dev-main
+elif echo "$DEV_VERSIONS" | grep -qx "dev-${BRANCH}"; then
+  COMPOSER_VERSION="dev-${BRANCH}"
+# Try legacy Drupal format: 8.x-1.x → strip prefix → 1.x-dev
+elif [[ "$BRANCH" =~ ^[0-9]+\.x-(.+)$ ]]; then
+  STRIPPED="${BASH_REMATCH[1]}"
+  if echo "$DEV_VERSIONS" | grep -qx "${STRIPPED}-dev"; then
+    COMPOSER_VERSION="${STRIPPED}-dev"
+  elif echo "$DEV_VERSIONS" | grep -qx "dev-${STRIPPED}"; then
+    COMPOSER_VERSION="dev-${STRIPPED}"
+  fi
+fi
+if [ -z "$COMPOSER_VERSION" ]; then
+  COMPOSER_VERSION="*"
+fi
+
+echo "Updating drupal/$MODULE_NAME to $COMPOSER_VERSION (branch: $BRANCH)..."
+composer require --no-interaction --update-with-all-dependencies "drupal/$MODULE_NAME:$COMPOSER_VERSION"
+
+echo ""
+printf '\033[32m  Done! drupal/%s updated to %s\033[0m\n' "$MODULE_NAME" "$COMPOSER_VERSION"

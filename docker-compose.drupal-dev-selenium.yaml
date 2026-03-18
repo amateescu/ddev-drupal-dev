@@ -1,0 +1,20 @@
+#ddev-generated
+services:
+  chrome:
+    container_name: ddev-${DDEV_SITENAME}-chrome
+    # Pin to a specific version for reproducibility.
+    # Update: https://hub.docker.com/r/selenium/standalone-chromium/tags
+    image: selenium/standalone-chromium:143.0.7499.169
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    shm_size: 2gb
+    expose:
+      - 7900
+    environment:
+      - VIRTUAL_HOST=$DDEV_HOSTNAME
+      - HTTPS_EXPOSE=7900:7900
+      - HTTP_EXPOSE=7910:7900
+    volumes:
+      - ".:/mnt/ddev_config:ro"
+      - ddev-global-cache:/mnt/ddev-global-cache

@@ -1,0 +1,36 @@
+#ddev-generated
+# This file is managed by the ddev-drupal-dev add-on.
+# Based on Drupal's example.gitignore with additional entries for DDEV.
+
+# This file ignores itself.
+.gitignore
+
+# DDEV
+/.ddev
+
+# Composer overlay
+composer.local.json
+composer.local.lock
+
+# direnv
+.envrc
+
+# Test output
+test_output
+
+# Recipes (created by composer install)
+recipes/
+
+# Ignore dependencies managed with Composer.
+/vendor/
+
+# Ignore configuration files that may contain sensitive information.
+sites/*/settings*.php
+sites/*/services*.yml
+
+# Ignore paths that contain user-generated content.
+sites/*/files
+sites/*/private
+
+# Ignore multi-site test environment.
+sites/simpletest
