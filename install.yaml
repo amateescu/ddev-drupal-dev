@@ -8,7 +8,7 @@ project_files:
   - drupal-dev/shell-helpers.sh
   - drupal-dev/gitignore
   - drupal-dev/composer-plugin
-  - commands/web/phpunit
+  - commands/host/phpunit
   - commands/web/add-module
   - commands/web/update-module
   - commands/web/remove-module

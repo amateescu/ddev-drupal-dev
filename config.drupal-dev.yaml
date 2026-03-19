@@ -2,6 +2,7 @@
 web_environment:
   - COMPOSER=composer.local.json
   # Test environment
+  - SIMPLETEST_DB=mysql://db:db@db/db
   - SIMPLETEST_BASE_URL=http://web
   - BROWSERTEST_OUTPUT_DIRECTORY=/var/www/html/${DDEV_DOCROOT}/test_output
   - BROWSERTEST_OUTPUT_BASE_URL=${DDEV_PRIMARY_URL}
