@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run PHPUnit tests
+## Usage: phpunit [--db=mysql|sqlite|pgsql] [phpunit-args]
+## Example: "ddev phpunit core/modules/field" or "ddev phpunit --db=sqlite core/modules/node"
+
+set -e
+
+# Parse our flags, pass everything else through to PHPUnit.
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --db=*) DB="${arg#--db=}" ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+if [ -n "$DB" ]; then
+  case "$DB" in
+    mysql)   SIMPLETEST_DB="mysql://db:db@db/db" ;;
+    sqlite)  SIMPLETEST_DB="sqlite://localhost/sites/default/files/db.sqlite" ;;
+    pgsql)
+      if [ "$DDEV_DATABASE_FAMILY" = "postgres" ]; then
+        SIMPLETEST_DB="pgsql://db:db@db/db"
+      elif ddev exec -- php -r "new PDO('pgsql:host=postgres;dbname=db', 'db', 'db');" 2>/dev/null; then
+        SIMPLETEST_DB="pgsql://db:db@postgres/db"
+      else
+        echo "Error: PostgreSQL is not available. Configure your project with"
+        echo "postgres or add a separate postgres container."
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Error: Unknown database type '$DB'. Use mysql, sqlite, or pgsql."
+      exit 1
+      ;;
+  esac
+  echo "Using database: $DB"
+fi
+
+# Clear stale webdriver sessions if Chrome is running.
+ddev exec -- bash >/dev/null 2>&1 << 'SCRIPT' || true
+  [ -z "${DRUPAL_TEST_WEBDRIVER_HOSTNAME:-}" ] && exit 0
+  base_url="http://${DRUPAL_TEST_WEBDRIVER_HOSTNAME}:${DRUPAL_TEST_WEBDRIVER_PORT}"
+  curl -f -s "${base_url}/status" 2>/dev/null \
+    | jq -r '.value.nodes[].slots[].session.sessionId // empty' 2>/dev/null \
+    | while read -r session; do
+        curl -s -X DELETE "${base_url}/session/${session}" >/dev/null 2>&1
+      done
+SCRIPT
+
+# Only override SIMPLETEST_DB when --db was specified; otherwise the container
+# default applies.
+cmd=(phpunit -c "${DDEV_DOCROOT:+$DDEV_DOCROOT/}core" "${args[@]}")
+[ -n "$DB" ] && cmd=(env "SIMPLETEST_DB=$SIMPLETEST_DB" "${cmd[@]}")
+ddev exec -- "${cmd[@]}"

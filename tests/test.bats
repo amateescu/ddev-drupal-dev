@@ -268,7 +268,7 @@ teardown() {
   assert_file_not_exists "${TESTDIR}/.gitignore"
   assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
   assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/web/phpunit"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/web/add-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/web/remove-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/web/update-module"
