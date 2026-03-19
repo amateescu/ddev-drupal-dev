@@ -13,6 +13,17 @@ Extra dependencies (contrib modules, Drush, dev tools) are managed through a `co
 
 ## Installation
 
+Clone Drupal core and configure DDEV to use it as the project root:
+
+```bash
+git clone https://git.drupalcode.org/project/drupal.git drupal-dev
+cd drupal-dev
+ddev config --project-type=drupal12
+ddev start
+```
+
+Then install the add-on:
+
 ```bash
 ddev add-on get amateescu/ddev-drupal-dev
 ddev restart
