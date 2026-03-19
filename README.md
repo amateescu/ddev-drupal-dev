@@ -122,7 +122,7 @@ An `.envrc` file is created during installation. If you have [direnv](https://di
 direnv allow
 ```
 
-This sets the `COMPOSER` env var and sources the shell helpers, so `composer`, `drush`, `php` and `phpunit` all delegate to DDEV automatically when you're in the project directory.
+This sets the `COMPOSER` env var on the host so that running `composer` directly on the host uses the overlay. Note that direnv cannot export shell functions, so you still need the shell helpers above for `composer`, `drush`, `php` and `phpunit` delegation.
 
 ## Command reference
 
