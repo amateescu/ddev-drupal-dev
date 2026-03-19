@@ -38,7 +38,7 @@ post_install_actions:
     printf '\n'
     printf "    \033[36msource \"$(cd .. && pwd)/.ddev/drupal-dev/shell-helpers.sh\"\033[0m\n"
     printf '\n'
-    printf '  Or if you use \033[1mdirenv\033[0m, run: \033[36mdirenv allow\033[0m\n'
+    printf '  If you use \033[1mdirenv\033[0m, also run: \033[36mdirenv allow\033[0m\n'
     printf '\n'
 
 removal_actions:

@@ -24,7 +24,7 @@ _ddev_delegate() {
   fi
 }
 
-composer() { _ddev_delegate composer "$@"; }
-drush()    { _ddev_delegate drush "$@"; }
-php()      { _ddev_delegate php "$@"; }
-phpunit()  { _ddev_delegate phpunit "$@"; }
+function composer { _ddev_delegate composer "$@"; }
+function drush    { _ddev_delegate drush "$@"; }
+function php      { _ddev_delegate php "$@"; }
+function phpunit  { _ddev_delegate phpunit "$@"; }
