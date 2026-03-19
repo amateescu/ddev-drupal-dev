@@ -57,39 +57,49 @@ DRUPAL_GIT_HTTPS="https://git.drupalcode.org/project/$MODULE_NAME.git"
 DRUPAL_GIT_SSH="git@git.drupal.org:project/$MODULE_NAME.git"
 
 if [ -d "$MODULE_DIR" ]; then
-  echo "Error: $MODULE_DIR already exists."
-  echo "Remove it first with: ddev remove-module $MODULE_NAME"
-  exit 1
-fi
-
-# Build the remote URL.
-if [ "$USE_HTTPS" = true ]; then
-  REMOTE_URL="$DRUPAL_GIT_HTTPS"
-else
-  REMOTE_URL="$DRUPAL_GIT_SSH"
-fi
-
-# Auto-detect branch if not specified (always use HTTPS for ls-remote).
-if [ -z "$BRANCH" ]; then
-  echo "Detecting default branch for $MODULE_NAME..."
-
-  BRANCH=$(git ls-remote --symref "$DRUPAL_GIT_HTTPS" HEAD 2>/dev/null \
-    | grep '^ref: ' | sed 's/^ref: refs\/heads\///' | sed 's/\tHEAD$//')
-
-  if [ -z "$BRANCH" ]; then
-    echo "Error: Could not detect default branch. Specify one manually:"
-    echo "  ddev add-module $MODULE_NAME <branch>"
+  if [ ! -d "$MODULE_DIR/.git" ]; then
+    echo "Error: $MODULE_DIR already exists but is not a git checkout."
+    echo "Remove it first with: ddev remove-module $MODULE_NAME"
     exit 1
   fi
+  printf '%s already exists as a git checkout. Register it with Composer? [y/N] ' "$MODULE_DIR"
+  read -r REPLY
+  if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+    exit 0
+  fi
+  BRANCH=$(git -C "$MODULE_DIR" symbolic-ref --short HEAD 2>/dev/null)
+  if [ -z "$BRANCH" ]; then
+    echo "Error: Could not determine the current branch of $MODULE_DIR (detached HEAD?)."
+    exit 1
+  fi
+  echo "Using existing checkout on branch: $BRANCH"
+else
+  # Build the remote URL.
+  if [ "$USE_HTTPS" = true ]; then
+    REMOTE_URL="$DRUPAL_GIT_HTTPS"
+  else
+    REMOTE_URL="$DRUPAL_GIT_SSH"
+  fi
 
-  echo "Using branch: $BRANCH"
-fi
+  # Auto-detect branch if not specified (always use HTTPS for ls-remote).
+  if [ -z "$BRANCH" ]; then
+    echo "Detecting default branch for $MODULE_NAME..."
+    BRANCH=$(git ls-remote --symref "$DRUPAL_GIT_HTTPS" HEAD 2>/dev/null \
+      | grep '^ref: ' | sed 's/^ref: refs\/heads\///' | sed 's/\tHEAD$//')
+    if [ -z "$BRANCH" ]; then
+      echo "Error: Could not detect default branch. Specify one manually:"
+      echo "  ddev add-module $MODULE_NAME <branch>"
+      exit 1
+    fi
+    echo "Using branch: $BRANCH"
+  fi
 
-# Clone the module.
-echo "Cloning drupal/$MODULE_NAME ($BRANCH) into $MODULE_DIR..."
-if ! git clone --branch "$BRANCH" "$REMOTE_URL" "$MODULE_DIR"; then
-  echo "Error: Failed to clone drupal/$MODULE_NAME. Check that the module and branch exist."
-  exit 1
+  # Clone the module.
+  echo "Cloning drupal/$MODULE_NAME ($BRANCH) into $MODULE_DIR..."
+  if ! git clone --branch "$BRANCH" "$REMOTE_URL" "$MODULE_DIR"; then
+    echo "Error: Failed to clone drupal/$MODULE_NAME. Check that the module and branch exist."
+    exit 1
+  fi
 fi
 
 # Find the dev version from the canonical Drupal Composer repo that matches

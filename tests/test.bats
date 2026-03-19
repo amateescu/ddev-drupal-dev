@@ -171,10 +171,14 @@ teardown() {
   run ddev composer show drupal/token
   assert_success
 
-  # Rejects duplicate clone
-  run ddev add-module --https token
+  # Rejects a non-git directory at the install path
+  run ddev exec -- mkdir -p modules/contrib/fakemodule
+  assert_success
+  run ddev add-module --https fakemodule
   assert_failure
-  assert_output --partial "already exists"
+  assert_output --partial "not a git checkout"
+  run ddev exec -- rmdir modules/contrib/fakemodule
+  assert_success
 
   # remove-module aborts when there are uncommitted changes
   echo 'dirty' > "${TESTDIR}/modules/contrib/token/dirty.txt"
