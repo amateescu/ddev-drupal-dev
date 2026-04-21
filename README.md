@@ -79,6 +79,30 @@ ddev composer require drupal/pathauto
 
 Core's `composer.json` and `composer.lock` are never modified by the overlay. You work on core normally: edit files, run tests, commit, create patches.
 
+## Reproducing core's exact dependency versions
+
+When reproducing a core bug or validating a patch, you sometimes need the same resolved dependency versions as core's `composer.lock`. By default the overlay's solver runs fresh, so shared packages (Symfony, Guzzle, etc.) may resolve to newer versions than core recorded.
+
+Enable pinning to keep every shared package at core's locked version:
+
+```json
+{
+    "extra": {
+        "drupal-dev": {
+            "pin-core-lock": true
+        }
+    }
+}
+```
+
+Then `ddev composer update` to re-solve with pinning applied. Packages that appear in core's `composer.lock` are pinned to the exact version (and commit SHA, for dev refs); overlay-only packages resolve normally. Subsequent `ddev composer install` runs replay the pinned `composer.local.lock` unchanged.
+
+Pinning affects the solve step, so after enabling (or disabling) the flag you need to run `composer update` once to regenerate `composer.local.lock`. Core's lock is re-read on every solve, so there is no separate refresh step.
+
+Disable it by setting the flag to `false` or removing the key, then `ddev composer update`.
+
+This also makes bug reports reproducible: commit your `composer.local.json` (with `pin-core-lock` enabled) alongside a failing test, and a reviewer running `ddev composer install` gets the identical dependency graph.
+
 ## Running tests
 
 Tests run against your project's configured database by default. Use `--db` to switch:
@@ -141,6 +165,7 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 3. The `COMPOSER` env var is set to `composer.local.json` inside the DDEV web container, so Composer reads the overlay instead of core's file.
 4. Result: a unified `vendor/` and autoloader with both core's deps and your extras, while core's `composer.json` and `composer.lock` remain untouched.
 5. A custom Composer plugin (`drupal-dev/composer-git-installer`) intercepts installs for `drupal-module`, `drupal-theme`, and `drupal-profile` packages. If a `.git` directory already exists at the install path, the download is skipped and the package is registered in the installed repository so autoloading works correctly.
+6. When `extra.drupal-dev.pin-core-lock` is enabled, the same plugin subscribes to Composer's pre-pool-create event and filters the solver's candidate pool against core's `composer.lock`, so shared packages can only resolve to their locked versions.
 
 Only `composer.local.json` and `composer.local.lock` are written (both ignored via `.gitignore`).
 

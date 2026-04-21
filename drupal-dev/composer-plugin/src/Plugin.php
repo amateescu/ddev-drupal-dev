@@ -46,6 +46,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface
 
         $this->pinRootVersionFromCoreLock();
         $this->registerInstaller();
+
+        $composer->getEventDispatcher()->addSubscriber(new CoreLockPinner($composer, $io));
     }
 
     /**

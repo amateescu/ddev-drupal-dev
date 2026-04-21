@@ -271,3 +271,41 @@ teardown() {
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
 }
+
+@test "pin-core-lock" {
+  set -eu -o pipefail
+  addon_setup
+
+  # Flag off (default): no pinning hint on a fresh solve.
+  rm -f "${TESTDIR}/composer.local.lock"
+  run ddev composer install
+  assert_success
+  refute_output --partial "Core lock pinning active"
+
+  # Enable the flag.
+  run ddev composer config --json extra.drupal-dev '{"pin-core-lock":true}'
+  assert_success
+
+  # Pinning applies during a fresh solve and a shared package matches core's lock.
+  rm -f "${TESTDIR}/composer.local.lock"
+  run ddev composer install
+  assert_success
+  assert_output --partial "Core lock pinning active"
+  core_version=$(python3 -c "import json; d=json.load(open('${TESTDIR}/composer.lock')); print(next(p['version'] for p in d['packages'] if p['name']=='symfony/error-handler'))")
+  overlay_version=$(python3 -c "import json; d=json.load(open('${TESTDIR}/composer.local.lock')); print(next(p['version'] for p in d['packages'] if p['name']=='symfony/error-handler'))")
+  [ "${core_version}" = "${overlay_version}" ]
+
+  # Direct conflict: overlay require incompatible with the locked version
+  # triggers the pre-check error and aborts before the solver runs.
+  python3 - <<'PY'
+import json, os
+path = os.path.join(os.environ['TESTDIR'], 'composer.local.json')
+data = json.load(open(path))
+data.setdefault('require', {})['guzzlehttp/promises'] = '^1'
+json.dump(data, open(path, 'w'), indent=4)
+PY
+  rm -f "${TESTDIR}/composer.local.lock"
+  run ddev composer install
+  assert_failure
+  assert_output --partial "Core lock pinning conflict"
+}

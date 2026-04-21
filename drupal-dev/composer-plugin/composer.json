@@ -1,7 +1,7 @@
 {
     "_comment": "#ddev-generated",
     "name": "drupal-dev/composer-git-installer",
-    "description": "Composer installer that preserves git checkouts for Drupal packages",
+    "description": "Composer plugin for the ddev-drupal-dev addon: preserves git checkouts for Drupal packages and pins dependencies to core's composer.lock on request.",
     "type": "composer-plugin",
     "license": "MIT",
     "require": {
