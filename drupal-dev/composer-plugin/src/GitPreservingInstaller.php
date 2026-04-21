@@ -4,6 +4,7 @@
 namespace DrupalDev\ComposerGitInstaller;
 
 use Composer\Installer\LibraryInstaller;
+use Composer\Package\AliasPackage;
 use Composer\Package\PackageInterface;
 use Composer\Repository\InstalledRepositoryInterface;
 use React\Promise\PromiseInterface;
@@ -81,10 +82,18 @@ class GitPreservingInstaller extends LibraryInstaller
         if (is_dir($installPath . '/.git')) {
             return true;
         }
-        // drupal-core lives inside the project's own git repo rather than a
-        // separate checkout, so .git is in the parent. Treat the directory as
-        // preserved whenever it exists.
         if ($package->getType() === 'drupal-core') {
+            // drupal/core via a path repository installs as a no-op symlink
+            // and cannot overwrite core/. Skip preservation so Composer's
+            // normal post-install events (notably drupal/core-vendor-hardening
+            // cleaning other packages) fire as expected. Only preserve when
+            // an archive dist would extract over the existing checkout.
+            if ($package->getDistType() === 'path') {
+                return false;
+            }
+            // drupal-core lives inside the project's own git repo rather than
+            // a separate checkout, so .git is in the parent. Treat the
+            // directory as preserved whenever it exists.
             return is_dir($installPath);
         }
         return false;
@@ -95,6 +104,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function isInstalled(InstalledRepositoryInterface $repo, PackageInterface $package): bool
     {
+        if ($package instanceof AliasPackage) {
+            return parent::isInstalled($repo, $package);
+        }
         if ($this->hasGitCheckout($package)) {
             return true;
         }
@@ -103,9 +115,17 @@ class GitPreservingInstaller extends LibraryInstaller
 
     /**
      * Skip download if a git checkout exists.
+     *
+     * Alias packages have no installation source of their own, so calling
+     * parent::download() would throw. They are never downloaded individually;
+     * Composer downloads the underlying package. Return a resolved promise so
+     * parallel cleanup after another package fails does not surface the alias.
      */
     public function download(PackageInterface $package, ?PackageInterface $prevPackage = null): ?PromiseInterface
     {
+        if ($package instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($package)) {
             return \React\Promise\resolve(null);
         }
@@ -117,6 +137,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function prepare($type, PackageInterface $package, ?PackageInterface $prevPackage = null): ?PromiseInterface
     {
+        if ($package instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($package)) {
             return \React\Promise\resolve(null);
         }
@@ -128,6 +151,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function cleanup($type, PackageInterface $package, ?PackageInterface $prevPackage = null): ?PromiseInterface
     {
+        if ($package instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($package)) {
             return \React\Promise\resolve(null);
         }
@@ -139,6 +165,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function install(InstalledRepositoryInterface $repo, PackageInterface $package): ?PromiseInterface
     {
+        if ($package instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($package)) {
             if (!$repo->hasPackage($package)) {
                 $repo->addPackage(clone $package);
@@ -159,6 +188,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function uninstall(InstalledRepositoryInterface $repo, PackageInterface $package): ?PromiseInterface
     {
+        if ($package instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($package)) {
             $repo->removePackage($package);
             return \React\Promise\resolve(null);
@@ -171,6 +203,9 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     public function update(InstalledRepositoryInterface $repo, PackageInterface $initial, PackageInterface $target): ?PromiseInterface
     {
+        if ($target instanceof AliasPackage) {
+            return \React\Promise\resolve(null);
+        }
         if ($this->hasGitCheckout($target)) {
             $repo->removePackage($initial);
             if (!$repo->hasPackage($target)) {
