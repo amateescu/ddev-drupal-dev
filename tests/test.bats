@@ -172,13 +172,11 @@ teardown() {
   assert_success
 
   # Rejects a non-git directory at the install path
-  run ddev exec -- mkdir -p modules/contrib/fakemodule
-  assert_success
+  mkdir -p "${TESTDIR}/modules/contrib/fakemodule"
   run ddev add-module --https fakemodule
   assert_failure
   assert_output --partial "not a git checkout"
-  run ddev exec -- rmdir modules/contrib/fakemodule
-  assert_success
+  rmdir "${TESTDIR}/modules/contrib/fakemodule"
 
   # remove-module aborts when there are uncommitted changes
   echo 'dirty' > "${TESTDIR}/modules/contrib/token/dirty.txt"
@@ -269,7 +267,7 @@ teardown() {
   assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
   assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/web/add-module"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/web/remove-module"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/web/update-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/add-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
 }

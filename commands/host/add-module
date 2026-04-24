@@ -4,8 +4,6 @@
 ## Description: Clone a contrib module for development
 ## Usage: add-module [--https] <module_name> [branch]
 ## Example: "ddev add-module token" or "ddev add-module token 2.0.x"
-## ExecRaw: true
-## MutagenSync: true
 
 set -e
 
@@ -28,7 +26,7 @@ if [ $# -eq 0 ]; then
   echo "Options:"
   echo "  --https    Clone via HTTPS instead of SSH (read-only, no push access)"
   echo ""
-  echo "SSH cloning requires 'ddev auth ssh' to forward your SSH keys."
+  echo "SSH cloning uses your host SSH keys directly."
   echo ""
   echo "Examples:"
   echo "  ddev add-module token          # auto-detects the latest branch"
@@ -46,15 +44,19 @@ if [[ ! "$MODULE_NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
   exit 1
 fi
 
+cd "$DDEV_APPROOT"
+
 # Read the install path for drupal-module from Composer's installer-paths config.
-MODULE_DIR=$(composer config extra.installer-paths --json 2>/dev/null \
-  | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null \
-  | sed "s/{\\\$name}/$MODULE_NAME/")
+MODULE_DIR=$(ddev exec -- bash <<'EOF' | sed "s/{\\\$name}/$MODULE_NAME/"
+composer config extra.installer-paths --json 2>/dev/null \
+  | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null
+EOF
+)
 if [ -z "$MODULE_DIR" ]; then
   MODULE_DIR="modules/contrib/$MODULE_NAME"
 fi
 DRUPAL_GIT_HTTPS="https://git.drupalcode.org/project/$MODULE_NAME.git"
-DRUPAL_GIT_SSH="git@git.drupalcode.org:project/$MODULE_NAME.git"
+DRUPAL_GIT_SSH="git@git.drupal.org:project/$MODULE_NAME.git"
 
 if [ -d "$MODULE_DIR" ]; then
   if [ ! -d "$MODULE_DIR/.git" ]; then
@@ -94,18 +96,23 @@ else
     echo "Using branch: $BRANCH"
   fi
 
-  # Clone the module.
+  # Clone the module on the host.
   echo "Cloning drupal/$MODULE_NAME ($BRANCH) into $MODULE_DIR..."
   if ! git clone --branch "$BRANCH" "$REMOTE_URL" "$MODULE_DIR"; then
     echo "Error: Failed to clone drupal/$MODULE_NAME. Check that the module and branch exist."
     exit 1
   fi
+
+  # Ensure the clone is visible inside the container before composer reads it.
+  ddev mutagen sync >/dev/null 2>&1 || true
 fi
 
 # Find the dev version from the canonical Drupal Composer repo that matches
 # our branch, so the lock file records the correct dev version.
-DEV_VERSIONS=$(composer show --all "drupal/$MODULE_NAME" --format=json 2>/dev/null \
-  | jq -r '.versions[]' 2>/dev/null | grep -E '\-dev$|^dev-' || true)
+DEV_VERSIONS=$(ddev exec -- bash <<EOF | grep -E '\-dev$|^dev-' || true
+composer show --all "drupal/$MODULE_NAME" --format=json 2>/dev/null | jq -r '.versions[]' 2>/dev/null
+EOF
+)
 COMPOSER_VERSION=""
 # Try direct match: 2.0.x → 2.0.x-dev
 if echo "$DEV_VERSIONS" | grep -qx "${BRANCH}-dev"; then
@@ -130,20 +137,21 @@ fi
 # plugin detects the .git directory and skips the download, preserving
 # the checkout.
 echo "Adding path repository and requiring drupal/$MODULE_NAME..."
-composer config repositories.$MODULE_NAME path "$MODULE_DIR"
-composer require --no-interaction --update-with-all-dependencies "drupal/$MODULE_NAME:$COMPOSER_VERSION"
+ddev composer config repositories.$MODULE_NAME path "$MODULE_DIR"
+ddev composer require --no-interaction --update-with-all-dependencies "drupal/$MODULE_NAME:$COMPOSER_VERSION"
 
 # Remove the #ddev-generated marker from composer files since
-# they now contain user-specific configuration.
-sed -i '/"_comment": "#ddev-generated"/d' composer.local.json 2>/dev/null || true
-sed -i '/#ddev-generated/d' composer.local.lock 2>/dev/null || true
+# they now contain user-specific configuration. Run inside the container
+# since those files were just written there by composer.
+ddev exec -- sed -i '/"_comment": "#ddev-generated"/d' composer.local.json 2>/dev/null || true
+ddev exec -- sed -i '/#ddev-generated/d' composer.local.lock 2>/dev/null || true
 
 echo ""
 printf '\033[32m  Done! drupal/%s is ready for development in %s\033[0m\n' "$MODULE_NAME" "$MODULE_DIR"
 
 # Show require-dev dependencies with suggestions for how to install them.
 if [ -f "$MODULE_DIR/composer.json" ]; then
-  DEV_DEPS=$(jq -r '."require-dev" // {} | to_entries[] | "\(.key) \(.value)"' "$MODULE_DIR/composer.json")
+  DEV_DEPS=$(ddev exec -- jq -r '."require-dev" // {} | to_entries[] | "\(.key) \(.value)"' "$MODULE_DIR/composer.json")
   if [ -n "$DEV_DEPS" ]; then
     printf '\n'
     printf '  \033[1mDev dependencies (not installed):\033[0m\n'

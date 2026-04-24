@@ -35,11 +35,12 @@ ddev composer install
 Use `ddev add-module` to clone a contrib module for development:
 
 ```bash
-ddev auth ssh                   # forward SSH keys (needed once per session)
 ddev add-module token
 ddev add-module token 2.0.x     # specific branch
 ddev add-module --https token   # or use HTTPS (no push access)
 ```
+
+The clone runs on your host, so it uses your host SSH keys directly; no `ddev auth ssh` needed.
 
 This clones the module into `modules/contrib/`, registers it as a path repository in `composer.local.json`, and runs `composer require`, all in one step.
 

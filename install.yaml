@@ -9,9 +9,9 @@ project_files:
   - drupal-dev/gitignore
   - drupal-dev/composer-plugin
   - commands/host/phpunit
-  - commands/web/add-module
-  - commands/web/update-module
-  - commands/web/remove-module
+  - commands/host/add-module
+  - commands/host/update-module
+  - commands/host/remove-module
   - docker-compose.drupal-dev-selenium.yaml
   - config.drupal-dev.yaml
 
@@ -21,6 +21,16 @@ post_install_actions:
   - "[ -f ../composer.local.json ] || cp drupal-dev/composer.local.json ../composer.local.json"
   - "! [ -f ../.envrc ] || grep -q '#ddev-generated' ../.envrc && cp drupal-dev/envrc ../.envrc"
   - "! [ -f ../.gitignore ] || grep -q '#ddev-generated' ../.gitignore && cp drupal-dev/gitignore ../.gitignore"
+  # Clean up web commands from a previous install now that these commands
+  # have moved to commands/host/. Only remove files still marked as generated.
+  - |
+    for cmd in add-module remove-module update-module; do
+      f="commands/web/$cmd"
+      if [ -f "$f" ] && grep -q '#ddev-generated' "$f"; then
+        rm -f "$f"
+      fi
+    done
+    rmdir commands/web 2>/dev/null || true
   # Create test output directory
   - mkdir -p ../test_output
   # User-friendly post-install message
