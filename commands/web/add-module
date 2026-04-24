@@ -54,7 +54,7 @@ if [ -z "$MODULE_DIR" ]; then
   MODULE_DIR="modules/contrib/$MODULE_NAME"
 fi
 DRUPAL_GIT_HTTPS="https://git.drupalcode.org/project/$MODULE_NAME.git"
-DRUPAL_GIT_SSH="git@git.drupal.org:project/$MODULE_NAME.git"
+DRUPAL_GIT_SSH="git@git.drupalcode.org:project/$MODULE_NAME.git"
 
 if [ -d "$MODULE_DIR" ]; then
   if [ ! -d "$MODULE_DIR/.git" ]; then
