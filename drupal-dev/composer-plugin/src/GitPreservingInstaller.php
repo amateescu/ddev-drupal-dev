@@ -83,17 +83,12 @@ class GitPreservingInstaller extends LibraryInstaller
             return true;
         }
         if ($package->getType() === 'drupal-core') {
-            // drupal/core via a path repository installs as a no-op symlink
-            // and cannot overwrite core/. Skip preservation so Composer's
-            // normal post-install events (notably drupal/core-vendor-hardening
-            // cleaning other packages) fire as expected. Only preserve when
-            // an archive dist would extract over the existing checkout.
-            if ($package->getDistType() === 'path') {
-                return false;
-            }
             // drupal-core lives inside the project's own git repo rather than
             // a separate checkout, so .git is in the parent. Treat the
-            // directory as preserved whenever it exists.
+            // directory as preserved whenever it exists, regardless of dist
+            // type: letting composer process a dist-type change (e.g. zip in
+            // installed.json to path in the lock) triggers a destructive
+            // remove + install that wipes out core/.
             return is_dir($installPath);
         }
         return false;
