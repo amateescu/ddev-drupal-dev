@@ -78,18 +78,29 @@ class GitPreservingInstaller extends LibraryInstaller
      */
     private function hasGitCheckout(PackageInterface $package): bool
     {
-        $installPath = $this->getInstallPath($package);
-        if (is_dir($installPath . '/.git')) {
+        return is_dir($this->getInstallPath($package) . '/.git');
+    }
+
+    /**
+     * Check if this package's files should be left alone on disk.
+     *
+     * drupal-core lives inside the project's own git repo rather than a
+     * separate checkout, so .git is in the parent. Preserve it whenever the
+     * directory exists, regardless of dist type: letting composer process a
+     * dist-type change (e.g. zip in installed.json to path in the lock)
+     * triggers a destructive remove + install that wipes out core/.
+     *
+     * download(), prepare() and cleanup() still fall through to the parent so
+     * composer can set up package state (notably installationSource) that the
+     * rest of its pipeline relies on.
+     */
+    private function shouldPreserveInstall(PackageInterface $package): bool
+    {
+        if ($this->hasGitCheckout($package)) {
             return true;
         }
         if ($package->getType() === 'drupal-core') {
-            // drupal-core lives inside the project's own git repo rather than
-            // a separate checkout, so .git is in the parent. Treat the
-            // directory as preserved whenever it exists, regardless of dist
-            // type: letting composer process a dist-type change (e.g. zip in
-            // installed.json to path in the lock) triggers a destructive
-            // remove + install that wipes out core/.
-            return is_dir($installPath);
+            return is_dir($this->getInstallPath($package));
         }
         return false;
     }
@@ -102,7 +113,7 @@ class GitPreservingInstaller extends LibraryInstaller
         if ($package instanceof AliasPackage) {
             return parent::isInstalled($repo, $package);
         }
-        if ($this->hasGitCheckout($package)) {
+        if ($this->shouldPreserveInstall($package)) {
             return true;
         }
         return parent::isInstalled($repo, $package);
@@ -163,7 +174,7 @@ class GitPreservingInstaller extends LibraryInstaller
         if ($package instanceof AliasPackage) {
             return \React\Promise\resolve(null);
         }
-        if ($this->hasGitCheckout($package)) {
+        if ($this->shouldPreserveInstall($package)) {
             if (!$repo->hasPackage($package)) {
                 $repo->addPackage(clone $package);
             }
@@ -186,7 +197,7 @@ class GitPreservingInstaller extends LibraryInstaller
         if ($package instanceof AliasPackage) {
             return \React\Promise\resolve(null);
         }
-        if ($this->hasGitCheckout($package)) {
+        if ($this->shouldPreserveInstall($package)) {
             $repo->removePackage($package);
             return \React\Promise\resolve(null);
         }
@@ -201,7 +212,7 @@ class GitPreservingInstaller extends LibraryInstaller
         if ($target instanceof AliasPackage) {
             return \React\Promise\resolve(null);
         }
-        if ($this->hasGitCheckout($target)) {
+        if ($this->shouldPreserveInstall($target)) {
             $repo->removePackage($initial);
             if (!$repo->hasPackage($target)) {
                 $repo->addPackage(clone $target);
