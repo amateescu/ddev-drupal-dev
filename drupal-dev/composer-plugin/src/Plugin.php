@@ -108,7 +108,6 @@ class Plugin implements PluginInterface, EventSubscriberInterface
                 continue;
             }
             $property = $reflection->getProperty($name);
-            $property->setAccessible(true);
             $property->setValue($root, $value);
         }
     }
