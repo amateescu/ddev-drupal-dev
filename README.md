@@ -101,8 +101,6 @@ Pinning affects the solve step, so after enabling (or disabling) the flag you ne
 
 Disable it by setting the flag to `false` or removing the key, then `ddev composer update`.
 
-This also makes bug reports reproducible: commit your `composer.local.json` (with `pin-core-lock` enabled) alongside a failing test, and a reviewer running `ddev composer install` gets the identical dependency graph.
-
 ## Running tests
 
 Tests run against your project's configured database by default. Use `--db` to switch:
