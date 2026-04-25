@@ -1,6 +1,6 @@
 name: drupal-dev
 
-ddev_version_constraint: '>= v1.24.6'
+ddev_version_constraint: '>= v1.25.0'
 
 project_files:
   - drupal-dev/composer.local.json
