@@ -308,4 +308,44 @@ PY
   run ddev composer install
   assert_failure
   assert_output --partial "Core lock pinning conflict"
+
+  # Revert the conflict so the next assertions exercise unrelated paths.
+  python3 - <<'PY'
+import json, os
+path = os.path.join(os.environ['TESTDIR'], 'composer.local.json')
+data = json.load(open(path))
+data.get('require', {}).pop('guzzlehttp/promises', None)
+json.dump(data, open(path, 'w'), indent=4)
+PY
+
+  # Missing core lock with pinning enabled fails loudly instead of silently
+  # falling back to a fresh solve.
+  mv "${TESTDIR}/composer.lock" "${TESTDIR}/composer.lock.bak"
+  rm -f "${TESTDIR}/composer.local.lock"
+  run ddev composer install
+  assert_failure
+  assert_output --partial "Core lock pinning is enabled"
+  mv "${TESTDIR}/composer.lock.bak" "${TESTDIR}/composer.lock"
+
+  # Dev refs (when present in core's lock) are pinned to the locked SHA so
+  # the overlay's composer.local.lock records the same source reference.
+  # Match Composer's notion of dev: dev- prefix or -dev suffix on the version.
+  dev_package=$(python3 - <<'PY'
+import json, os
+d = json.load(open(os.path.join(os.environ['TESTDIR'], 'composer.lock')))
+for p in d.get('packages', []) + d.get('packages-dev', []):
+    v = p.get('version', '')
+    if (v.startswith('dev-') or v.endswith('-dev')) and p.get('source', {}).get('reference'):
+        print(p['name'])
+        break
+PY
+)
+  if [ -n "${dev_package}" ]; then
+    rm -f "${TESTDIR}/composer.local.lock"
+    run ddev composer install
+    assert_success
+    core_sha=$(python3 -c "import json, os; d=json.load(open(os.path.join(os.environ['TESTDIR'],'composer.lock'))); pkg=next(p for p in d['packages']+d.get('packages-dev',[]) if p['name']=='${dev_package}'); print(pkg['source']['reference'])")
+    overlay_sha=$(python3 -c "import json, os; d=json.load(open(os.path.join(os.environ['TESTDIR'],'composer.local.lock'))); pkg=next(p for p in d['packages']+d.get('packages-dev',[]) if p['name']=='${dev_package}'); print(pkg['source']['reference'])")
+    [ "${core_sha}" = "${overlay_sha}" ]
+  fi
 }

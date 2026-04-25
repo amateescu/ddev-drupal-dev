@@ -4,6 +4,7 @@
 namespace DrupalDev\ComposerGitInstaller;
 
 use Composer\Package\Link;
+use Composer\Package\PackageInterface;
 use Composer\Semver\Constraint\Constraint;
 
 /**
@@ -14,7 +15,7 @@ class ConflictDetector
 {
     /**
      * @param array<Link> $links Root require + require-dev links to check.
-     * @param array<string, array{version: string, version_normalized: string}> $locked
+     * @param array<string, PackageInterface> $locked
      * @return array<int, array{name: string, overlay_constraint: string, locked_version: string}>
      */
     public static function detect(array $links, array $locked): array
@@ -25,14 +26,14 @@ class ConflictDetector
             if (!isset($locked[$name])) {
                 continue;
             }
-            $lockedConstraint = new Constraint('==', $locked[$name]['version_normalized']);
+            $lockedConstraint = new Constraint('==', $locked[$name]->getVersion());
             if ($link->getConstraint()->matches($lockedConstraint)) {
                 continue;
             }
             $conflicts[] = [
                 'name' => $name,
                 'overlay_constraint' => $link->getPrettyConstraint(),
-                'locked_version' => $locked[$name]['version'],
+                'locked_version' => $locked[$name]->getPrettyVersion(),
             ];
         }
         return $conflicts;

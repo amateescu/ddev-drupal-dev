@@ -83,7 +83,7 @@ Core's `composer.json` and `composer.lock` are never modified by the overlay. Yo
 
 When reproducing a core bug or validating a patch, you sometimes need the same resolved dependency versions as core's `composer.lock`. By default the overlay's solver runs fresh, so shared packages (Symfony, Guzzle, etc.) may resolve to newer versions than core recorded.
 
-Enable pinning to keep every shared package at core's locked version:
+Enable pinning to keep shared packages at core's locked version:
 
 ```json
 {
@@ -96,6 +96,8 @@ Enable pinning to keep every shared package at core's locked version:
 ```
 
 Then `ddev composer update` to re-solve with pinning applied. Packages that appear in core's `composer.lock` are pinned to the exact version (and commit SHA, for dev refs); overlay-only packages resolve normally. Subsequent `ddev composer install` runs replay the pinned `composer.local.lock` unchanged.
+
+Aliased lock entries (rare; produced by `branch-alias` mappings) are not pinned in this version. They are listed at solve time as an info message and resolve via the normal solver. If reproducibility for an aliased package is critical, add it to your overlay's `require` with a constraint that selects the locked version.
 
 Pinning affects the solve step, so after enabling (or disabling) the flag you need to run `composer update` once to regenerate `composer.local.lock`. Core's lock is re-read on every solve, so there is no separate refresh step.
 
