@@ -97,7 +97,7 @@ Enable pinning to keep every shared package at core's locked version:
 
 Then `ddev composer update` to re-solve with pinning applied. Packages that appear in core's `composer.lock` are pinned to the exact version (and commit SHA, for dev refs); overlay-only packages resolve normally. Subsequent `ddev composer install` runs replay the pinned `composer.local.lock` unchanged.
 
-Pinning affects the solve step, so after enabling (or disabling) the flag you need to run `composer update` once to regenerate `composer.local.lock`. Core's lock is re-read on every solve, so there is no separate refresh step.
+Pinning affects the solve step, so after enabling (or disabling) the flag you need to run `ddev composer update` once to regenerate `composer.local.lock`. Core's lock is re-read on every solve, so there is no separate refresh step.
 
 Disable it by setting the flag to `false` or removing the key, then `ddev composer update`.
 
