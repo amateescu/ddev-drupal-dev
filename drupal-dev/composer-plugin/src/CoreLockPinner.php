@@ -8,7 +8,6 @@ use Composer\EventDispatcher\EventSubscriberInterface;
 use Composer\Factory;
 use Composer\IO\IOInterface;
 use Composer\Json\JsonFile;
-use Composer\Package\AliasPackage;
 use Composer\Package\CompletePackage;
 use Composer\Package\Locker;
 use Composer\Plugin\PluginEvents;
@@ -22,6 +21,11 @@ use Composer\Plugin\PrePoolCreateEvent;
  * Reads core's composer.lock fresh on every install and filters the solver's
  * pool to only candidate packages whose versions match the lock. Dev entries
  * have their source/dist references rewritten to match the locked SHA.
+ *
+ * Aliased lock entries are accepted on either side: both the underlying
+ * package and the AliasPackage wrapper end up keyed under the same name,
+ * and the wrapper proxies its references to the underlying package so dev
+ * pinning works through the alias.
  */
 class CoreLockPinner implements EventSubscriberInterface
 {
@@ -68,33 +72,17 @@ class CoreLockPinner implements EventSubscriberInterface
             ));
         }
 
-        // Build a name-keyed map of locked packages, skipping aliased entries.
-        // Aliases appear as both the original package and an AliasPackage
-        // wrapping it; collect alias targets so both sides are excluded.
-        $aliasNames = [];
-        foreach ($locker->getAliases() as $alias) {
-            if (isset($alias['package']) && is_string($alias['package'])) {
-                $aliasNames[$alias['package']] = true;
-            }
-        }
+        // Build a name-keyed map of locked packages. Aliases appear as both
+        // the underlying package and an AliasPackage wrapping it; storing
+        // both under the same name lets the pool filter accept either
+        // version, and AliasPackage proxies its references to the underlying
+        // package so dev-ref pinning works through the wrapper.
+        /** @var array<string, list<\Composer\Package\PackageInterface>> $locked */
         $locked = [];
         foreach ($locker->getLockedRepository()->getPackages() as $pkg) {
-            if ($pkg instanceof AliasPackage) {
-                continue;
-            }
-            if (isset($aliasNames[$pkg->getName()])) {
-                continue;
-            }
-            $locked[$pkg->getName()] = $pkg;
+            $locked[$pkg->getName()][] = $pkg;
         }
 
-        if ($aliasNames !== []) {
-            $this->io->writeError(sprintf(
-                '<info>pin-core-lock: skipping %d aliased lock entries (not supported in this version): %s</info>',
-                count($aliasNames),
-                implode(', ', array_keys($aliasNames))
-            ));
-        }
         if ($locked === []) {
             return;
         }
@@ -120,8 +108,14 @@ class CoreLockPinner implements EventSubscriberInterface
             }
             $seen[$name] = true;
             $poolVersions[$name][] = $package->getPrettyVersion();
-            $entry = $locked[$name];
-            if ($package->getVersion() !== $entry->getVersion()) {
+            $entry = null;
+            foreach ($locked[$name] as $candidate) {
+                if ($candidate->getVersion() === $package->getVersion()) {
+                    $entry = $candidate;
+                    break;
+                }
+            }
+            if ($entry === null) {
                 continue;
             }
             $matched[$name] = true;
@@ -184,7 +178,7 @@ class CoreLockPinner implements EventSubscriberInterface
 
     /**
      * @param array<int, string> $names
-     * @param array<string, \Composer\Package\PackageInterface> $locked
+     * @param array<string, list<\Composer\Package\PackageInterface>> $locked
      * @param array<string, array<int, string>> $poolVersions
      */
     private function formatMissingVersionsMessage(array $names, array $locked, array $poolVersions): string
@@ -193,7 +187,8 @@ class CoreLockPinner implements EventSubscriberInterface
         foreach ($names as $name) {
             $pool = $poolVersions[$name] ?? [];
             $poolDesc = $pool === [] ? 'nothing' : implode(', ', array_unique($pool));
-            $lines[] = sprintf('  %s: locked "%s", pool had %s', $name, $locked[$name]->getPrettyVersion(), $poolDesc);
+            $lockedDesc = implode('/', array_unique(array_map(static fn($p) => $p->getPrettyVersion(), $locked[$name])));
+            $lines[] = sprintf('  %s: locked "%s", pool had %s', $name, $lockedDesc, $poolDesc);
         }
         $lines[] = '';
         $lines[] = 'If you enabled or changed pin-core-lock recently, your composer.local.lock is stale.';
