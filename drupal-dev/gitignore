@@ -29,6 +29,10 @@ composer.local.lock
 # Test output
 test_output
 
+# Patch and diff files generated locally.
+*.patch
+*.diff
+
 # Ignore directories managed by Composer
 /drush/Commands/contrib/
 /libraries/
