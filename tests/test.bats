@@ -92,6 +92,11 @@ health_checks() {
   run grep -q "#ddev-generated" "${TESTDIR}/.gitignore"
   assert_success
 
+  # Verify the cheat sheet was copied and is gitignored
+  assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
+  run grep -qxF "/DRUPAL-DEV.md" "${TESTDIR}/.gitignore"
+  assert_success
+
   # Verify ddev phpunit works across all test types
   run ddev phpunit core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success
@@ -257,6 +262,7 @@ teardown() {
   # Unmodified files are all cleaned up on removal
   assert_file_exists "${TESTDIR}/composer.local.json"
   assert_file_exists "${TESTDIR}/.envrc"
+  assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
   run ddev add-on remove drupal-dev
   assert_success
   refute_output --partial "Unwilling to remove"
@@ -264,6 +270,7 @@ teardown() {
   assert_file_not_exists "${TESTDIR}/composer.local.lock"
   assert_file_not_exists "${TESTDIR}/.envrc"
   assert_file_not_exists "${TESTDIR}/.gitignore"
+  assert_file_not_exists "${TESTDIR}/DRUPAL-DEV.md"
   assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
   assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"

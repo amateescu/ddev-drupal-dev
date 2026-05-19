@@ -7,6 +7,7 @@ project_files:
   - drupal-dev/envrc
   - drupal-dev/shell-helpers.sh
   - drupal-dev/gitignore
+  - drupal-dev/DRUPAL-DEV.md
   - drupal-dev/composer-plugin
   - commands/host/phpunit
   - commands/host/add-module
@@ -21,6 +22,9 @@ post_install_actions:
   - "[ -f ../composer.local.json ] || cp drupal-dev/composer.local.json ../composer.local.json"
   - "! [ -f ../.envrc ] || grep -q '#ddev-generated' ../.envrc && cp drupal-dev/envrc ../.envrc"
   - "! [ -f ../.gitignore ] || grep -q '#ddev-generated' ../.gitignore && cp drupal-dev/gitignore ../.gitignore"
+  # Copy the cheat sheet and ignore it in any existing .gitignore.
+  - "! [ -f ../DRUPAL-DEV.md ] || grep -q '#ddev-generated' ../DRUPAL-DEV.md && cp drupal-dev/DRUPAL-DEV.md ../DRUPAL-DEV.md"
+  - "! [ -f ../.gitignore ] || grep -qxF '/DRUPAL-DEV.md' ../.gitignore || printf '\\n# ddev-drupal-dev cheat sheet\\n/DRUPAL-DEV.md\\n' >> ../.gitignore"
   # Clean up web commands from a previous install now that these commands
   # have moved to commands/host/. Only remove files still marked as generated.
   - |
@@ -55,4 +59,6 @@ removal_actions:
   - "grep -q '#ddev-generated' ../composer.local.json 2>/dev/null && rm -f ../composer.local.json ../composer.local.lock || true"
   - "grep -q '#ddev-generated' ../.envrc 2>/dev/null && rm -f ../.envrc || true"
   - "grep -q '#ddev-generated' ../.gitignore 2>/dev/null && rm -f ../.gitignore || true"
+  - "grep -q '#ddev-generated' ../DRUPAL-DEV.md 2>/dev/null && rm -f ../DRUPAL-DEV.md || true"
+  - "[ -f ../.gitignore ] && sed -i.bak -e '/^# ddev-drupal-dev cheat sheet$/d' -e '/^\\/DRUPAL-DEV\\.md$/d' ../.gitignore && rm -f ../.gitignore.bak || true"
   - rm -rf ../test_output
