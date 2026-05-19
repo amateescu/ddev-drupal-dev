@@ -29,8 +29,6 @@ composer.local.lock
 test_output
 
 # Ignore directories managed by Composer
-/composer/
-/core/
 /drush/Commands/contrib/
 /libraries/
 /modules/contrib/
@@ -38,6 +36,7 @@ test_output
 /themes/contrib/
 /themes/custom/
 /profiles/contrib/
+/profiles/custom/
 recipes/
 
 # Ignore dependencies managed with Composer.
@@ -57,4 +56,4 @@ sites/simpletest
 # Ignore assets for tooling
 /package.json
 node_modules/
-yarn.lock
+/yarn.lock
