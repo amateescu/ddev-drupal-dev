@@ -7,6 +7,8 @@
 # For local tests, install bats-core, bats-assert, bats-file, bats-support
 # And run this in the add-on root directory:
 #   bats ./tests/test.bats
+# To run tests in parallel (much faster, requires GNU parallel):
+#   bats --jobs 4 ./tests/test.bats
 # To exclude release tests:
 #   bats ./tests/test.bats --filter-tags '!release'
 # For debugging:
@@ -24,7 +26,7 @@ setup() {
   bats_load_library bats-support
 
   export DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." >/dev/null 2>&1 && pwd)"
-  export PROJNAME="test-$(basename "${GITHUB_REPO}")"
+  export PROJNAME="test-$(basename "${GITHUB_REPO}")-${BATS_TEST_NUMBER:-0}"
   mkdir -p "${HOME}/tmp"
   export TESTDIR="$(mktemp -d "${HOME}/tmp/${PROJNAME}.XXXXXX")"
   export DDEV_NONINTERACTIVE=true
@@ -35,7 +37,9 @@ setup() {
   git clone --depth=1 --branch 11.x https://git.drupalcode.org/project/drupal.git "${TESTDIR}"
   cd "${TESTDIR}"
 
-  run ddev config --project-name="${PROJNAME}" --project-tld=ddev.site --project-type=drupal11 --php-version=8.3
+  # Omit ddev-ssh-agent so parallel 'ddev start' calls don't race on the
+  # shared container name; tests use HTTPS for any git operations.
+  run ddev config --project-name="${PROJNAME}" --project-tld=ddev.site --project-type=drupal11 --php-version=8.3 --omit-containers=ddev-ssh-agent
   assert_success
   run ddev start -y
   assert_success

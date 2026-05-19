@@ -36,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Install GNU parallel for bats --jobs
+        run: sudo apt-get install -qq -y parallel
+
       - uses: ddev/github-action-add-on-test@v2
         with:
           ddev_version: ${{ matrix.ddev_version }}
@@ -43,3 +46,4 @@ jobs:
           debug_enabled: ${{ github.event.inputs.debug_enabled }}
           addon_repository: ${{ env.GITHUB_REPOSITORY }}
           addon_ref: ${{ env.GITHUB_REF }}
+          test_command: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'bats --jobs 4 tests' || 'bats --jobs 4 tests --filter-tags !release' }}
