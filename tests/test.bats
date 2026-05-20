@@ -35,6 +35,9 @@ setup() {
   git clone --depth=1 --branch 11.x https://git.drupalcode.org/project/drupal.git "${TESTDIR}"
   cd "${TESTDIR}"
 
+  # Ignore Composer security advisories in tests
+  export COMPOSER_NO_SECURITY_BLOCKING=1
+
   run ddev config --project-name="${PROJNAME}" --project-tld=ddev.site --project-type=drupal11 --php-version=8.3
   assert_success
   run ddev start -y
