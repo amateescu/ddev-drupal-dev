@@ -359,3 +359,41 @@ PY
     [ "${core_sha}" = "${overlay_sha}" ]
   fi
 }
+
+@test "config-platform" {
+  set -eu -o pipefail
+  addon_setup
+
+  if ! python3 -c "import json, sys; sys.exit(0 if json.load(open('${TESTDIR}/composer.json')).get('config', {}).get('platform') else 1)"; then
+    skip "core composer.json does not declare config.platform"
+  fi
+
+  # The plugin must sync config.platform from composer.json into composer.local.json
+  # so that tools like PHPStan, which read the root composer file directly, pick
+  # up the correct platform PHP version instead of falling back to the runtime.
+  core_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.json'))['config']['platform']['php'])")
+  overlay_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.local.json'))['config']['platform']['php'])")
+  [ "${core_platform}" = "${overlay_platform}" ]
+
+  # PHPStan must report the platform version, not the runtime version.
+  # -vvv emits "PHP version for analysis: X.Y (from config.platform.php in composer.json)"
+  run ddev exec vendor/bin/phpstan -vvv analyze --configuration=core/phpstan.neon.dist -- core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "from config.platform.php"
+
+  # A platform change in core (e.g. after a branch switch) propagates to
+  # composer.local.json on the next composer run.
+  python3 -c "import json; p='${TESTDIR}/composer.json'; d=json.load(open(p)); d['config']['platform']['php']='8.3.99'; json.dump(d, open(p, 'w'), indent=4)"
+  run ddev composer install
+  assert_success
+  overlay_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.local.json'))['config']['platform']['php'])")
+  [ "${overlay_platform}" = "8.3.99" ]
+
+  # When core stops declaring config.platform, the stale value is removed from
+  # composer.local.json so tools fall back to the runtime version.
+  python3 -c "import json; p='${TESTDIR}/composer.json'; d=json.load(open(p)); d['config'].pop('platform'); json.dump(d, open(p, 'w'), indent=4)"
+  run ddev composer install
+  assert_success
+  run python3 -c "import json; print('platform' in json.load(open('${TESTDIR}/composer.local.json')).get('config', {}))"
+  assert_output "False"
+}
