@@ -36,6 +36,17 @@ ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (needs ddev-postgre
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
+## Code quality
+
+```bash
+ddev phpstan core/modules/node         # PHPStan on specific paths
+ddev phpcs core/modules/node           # coding standard checks
+ddev cspell core/modules/node/**       # spell checking (globs)
+```
+
+Run any of them without arguments to check the whole codebase. `ddev cspell`
+needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
+
 ## Drupal core CLI (core 11.4+)
 
 ```bash

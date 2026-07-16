@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run cspell with Drupal core's configuration and dictionaries
+## Usage: cspell [flags] [globs]
+## Example: "ddev cspell core/modules/node/**" or "ddev cspell" for the whole codebase
+
+core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+
+if [ ! -x "$core/node_modules/.bin/cspell" ]; then
+  echo "cspell is not installed. Install core's node dependencies first:" >&2
+  echo "  ddev exec 'corepack enable && cd $core && yarn install'" >&2
+  exit 1
+fi
+
+# Mirror core's spellcheck:core yarn script: run from the core directory with
+# the project root as the cspell root, so globs are project-root-relative.
+cd "$core"
+if [ "$#" -eq 0 ]; then
+  set -- "core/**/*" "composer/**/*" "composer.json" ".gitlab-ci/*" ".gitlab-ci.yml"
+fi
+exec node_modules/.bin/cspell -c .cspell.json --root .. --cache --cache-location core/.cspellcache "$@"

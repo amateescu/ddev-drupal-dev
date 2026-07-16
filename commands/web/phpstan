@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run PHPStan with Drupal core's configuration
+## Usage: phpstan [flags] [paths]
+## Example: "ddev phpstan core/modules/node" or "ddev phpstan" for the full analysis
+
+core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+
+# Use core's partial configuration when specific paths are given. The full
+# configuration's baseline only applies cleanly to whole-codebase runs.
+config="$core/phpstan.neon.dist"
+for arg in "$@"; do
+  case "$arg" in
+    -*) ;;
+    *) config="$core/phpstan-partial.neon"; break ;;
+  esac
+done
+
+exec php -d apc.enabled=0 -d apc.enable_cli=0 vendor/bin/phpstan analyze --configuration="$config" "$@"

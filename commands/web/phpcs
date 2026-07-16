@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run PHP CodeSniffer with Drupal core's coding standard
+## Usage: phpcs [flags] [paths]
+## Example: "ddev phpcs core/modules/node" or "ddev phpcs" for the whole codebase
+
+exec vendor/bin/phpcs -ps --parallel="$(nproc)" --standard="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core/phpcs.xml.dist" "$@"
