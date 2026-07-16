@@ -6,7 +6,6 @@ web_environment:
   - SIMPLETEST_BASE_URL=${DDEV_PRIMARY_URL}
   - BROWSERTEST_OUTPUT_DIRECTORY=/var/www/html/${DDEV_DOCROOT}/test_output
   - BROWSERTEST_OUTPUT_BASE_URL=${DDEV_PRIMARY_URL}
-  - SYMFONY_DEPRECATIONS_HELPER=ignoreFile=/var/www/html/${DDEV_DOCROOT}/core/.deprecation-ignore.txt
   # Webdriver
   - DRUPAL_TEST_WEBDRIVER_HOSTNAME=chrome
   - DRUPAL_TEST_WEBDRIVER_PORT=4444
