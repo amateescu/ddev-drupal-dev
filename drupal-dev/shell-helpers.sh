@@ -3,7 +3,7 @@
 # Source this file in your ~/.bashrc or ~/.zshrc:
 #   source /path/to/your/project/.ddev/drupal-dev/shell-helpers.sh
 #
-# These functions delegate composer, drush, php and phpunit to DDEV when
+# These functions delegate composer, drush, php, phpunit and dr to DDEV when
 # you're inside a DDEV project directory, and fall back to the host binary
 # otherwise.
 
@@ -30,3 +30,4 @@ function composer { __ddev_delegate composer "$@"; }
 function drush    { __ddev_delegate drush "$@"; }
 function php      { __ddev_delegate php "$@"; }
 function phpunit  { __ddev_delegate phpunit "$@"; }
+function dr       { __ddev_delegate dr "$@"; }

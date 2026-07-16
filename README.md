@@ -114,6 +114,16 @@ ddev phpunit modules/contrib/token              # contrib module tests
 
 For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgres) add-on first.
 
+## Drupal core CLI
+
+Drupal core 11.4+ ships its own CLI called `dr`. The add-on exposes it as a DDEV command:
+
+```bash
+ddev dr list                           # list available commands
+ddev dr install standard               # install a site
+ddev dr cr                             # rebuild caches
+```
+
 ## Adding other packages
 
 Any package can be added through the overlay:
@@ -129,7 +139,7 @@ Inside DDEV, `ddev composer` always uses the overlay automatically. On the host,
 
 ### Shell helpers (recommended)
 
-The add-on includes a shell helpers script that wraps `composer`, `drush`, `php` and `phpunit`, automatically delegating to DDEV when you're inside a DDEV project and falling back to the host binary otherwise.
+The add-on includes a shell helpers script that wraps `composer`, `drush`, `php`, `phpunit` and `dr`, automatically delegating to DDEV when you're inside a DDEV project and falling back to the host binary otherwise.
 
 Add this to your `~/.bashrc` or `~/.zshrc`:
 
@@ -145,13 +155,14 @@ An `.envrc` file is created during installation. If you have [direnv](https://di
 direnv allow
 ```
 
-This sets the `COMPOSER` env var on the host so that running `composer` directly on the host uses the overlay. Note that direnv cannot export shell functions, so you still need the shell helpers above for `composer`, `drush`, `php` and `phpunit` delegation.
+This sets the `COMPOSER` env var on the host so that running `composer` directly on the host uses the overlay. Note that direnv cannot export shell functions, so you still need the shell helpers above for `composer`, `drush`, `php`, `phpunit` and `dr` delegation.
 
 ## Command reference
 
 | Command | Description |
 | ------- | ----------- |
 | `ddev phpunit [path]` | Run PHPUnit tests |
+| `ddev dr [command]` | Run Drupal core's `dr` CLI (core 11.4+) |
 | `ddev add-module <name>` | Clone a contrib module for development |
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |
 | `ddev remove-module <name>` | Remove a previously cloned contrib module |

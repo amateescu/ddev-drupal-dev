@@ -13,6 +13,7 @@ project_files:
   - commands/host/add-module
   - commands/host/update-module
   - commands/host/remove-module
+  - commands/web/dr
   - docker-compose.drupal-dev-selenium.yaml
   - config.drupal-dev.yaml
 
@@ -48,7 +49,7 @@ post_install_actions:
     printf '\n'
     printf '  \033[1mHost-side shell helpers:\033[0m\n'
     printf '  Add this to your ~/.bashrc or ~/.zshrc to auto-delegate\n'
-    printf '  composer, drush, php and phpunit to DDEV:\n'
+    printf '  composer, drush, php, phpunit and dr to DDEV:\n'
     printf '\n'
     printf "    \033[36msource \"$(cd .. && pwd)/.ddev/drupal-dev/shell-helpers.sh\"\033[0m\n"
     printf '\n'

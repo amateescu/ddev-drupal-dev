@@ -100,6 +100,11 @@ health_checks() {
   run grep -qxF "/DRUPAL-DEV.md" "${TESTDIR}/.gitignore"
   assert_success
 
+  # Verify the dr CLI command works
+  run ddev dr list
+  assert_success
+  assert_output --partial "cache:rebuild"
+
   # Verify ddev phpunit works across all test types
   run ddev phpunit core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success
