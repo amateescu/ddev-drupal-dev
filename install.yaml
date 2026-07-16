@@ -14,6 +14,9 @@ project_files:
   - commands/host/update-module
   - commands/host/remove-module
   - commands/web/dr
+  - commands/web/phpstan
+  - commands/web/phpcs
+  - commands/web/cspell
   - docker-compose.drupal-dev-selenium.yaml
   - config.drupal-dev.yaml
 

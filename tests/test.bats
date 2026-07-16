@@ -105,6 +105,18 @@ health_checks() {
   assert_success
   assert_output --partial "cache:rebuild"
 
+  # Verify the code quality commands work
+  run ddev phpstan core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  run ddev phpcs core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+
+  # cspell needs core's node dependencies, which are not installed here, so
+  # verify the helpful error message instead.
+  run ddev cspell composer.json
+  assert_failure
+  assert_output --partial "cspell is not installed"
+
   # Verify ddev phpunit works across all test types
   run ddev phpunit core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success

@@ -124,6 +124,21 @@ ddev dr install standard               # install a site
 ddev dr cr                             # rebuild caches
 ```
 
+## Code quality checks
+
+PHPStan, PHP CodeSniffer and cspell run with core's own configuration:
+
+```bash
+ddev phpstan core/modules/node         # PHPStan on specific paths
+ddev phpstan                           # full analysis with core's baseline
+ddev phpcs core/modules/node           # coding standard checks
+ddev phpcs                             # whole codebase
+ddev cspell core/modules/node/**       # spell checking (globs)
+ddev cspell                            # whole codebase
+```
+
+`ddev cspell` needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
+
 ## Adding other packages
 
 Any package can be added through the overlay:
@@ -163,6 +178,9 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | ------- | ----------- |
 | `ddev phpunit [path]` | Run PHPUnit tests |
 | `ddev dr [command]` | Run Drupal core's `dr` CLI (core 11.4+) |
+| `ddev phpstan [paths]` | Run PHPStan with core's configuration |
+| `ddev phpcs [paths]` | Run PHP CodeSniffer with core's coding standard |
+| `ddev cspell [globs]` | Run cspell with core's dictionaries |
 | `ddev add-module <name>` | Clone a contrib module for development |
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |
 | `ddev remove-module <name>` | Remove a previously cloned contrib module |
