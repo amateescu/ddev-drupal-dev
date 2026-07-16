@@ -36,6 +36,14 @@ ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (needs ddev-postgre
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
+## Drupal core CLI (core 11.4+)
+
+```bash
+ddev dr list                           # list available commands
+ddev dr install standard               # install a site
+ddev dr cr                             # rebuild caches
+```
+
 ## Pin core's exact dependency versions
 
 In `composer.local.json`:
@@ -48,7 +56,7 @@ Then `ddev composer update` once to regenerate the lock with pinning applied.
 
 ## Host-side shell helpers
 
-Add to `~/.bashrc` or `~/.zshrc` so bare `composer`, `drush`, `php`, `phpunit` auto-delegate to DDEV:
+Add to `~/.bashrc` or `~/.zshrc` so bare `composer`, `drush`, `php`, `phpunit`, `dr` auto-delegate to DDEV:
 
 ```bash
 source /path/to/your/project/.ddev/drupal-dev/shell-helpers.sh
