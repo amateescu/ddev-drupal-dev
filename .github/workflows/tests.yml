@@ -21,7 +21,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancelled runs show up as "failing" in the README badge, so let runs on
+  # main queue up instead of cancelling each other.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
