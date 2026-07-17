@@ -100,11 +100,6 @@ health_checks() {
   run grep -qxF "/DRUPAL-DEV.md" "${TESTDIR}/.gitignore"
   assert_success
 
-  # Verify the dr CLI command works
-  run ddev dr list
-  assert_success
-  assert_output --partial "cache:rebuild"
-
   # Verify the code quality commands work
   run ddev phpstan core/lib/Drupal/Core/Entity/EntityInterface.php
   assert_success

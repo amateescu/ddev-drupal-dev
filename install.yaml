@@ -13,7 +13,6 @@ project_files:
   - commands/host/add-module
   - commands/host/update-module
   - commands/host/remove-module
-  - commands/web/dr
   - commands/web/phpstan
   - commands/web/phpcs
   - commands/web/cspell
@@ -30,9 +29,10 @@ post_install_actions:
   - "! [ -f ../DRUPAL-DEV.md ] || grep -q '#ddev-generated' ../DRUPAL-DEV.md && cp drupal-dev/DRUPAL-DEV.md ../DRUPAL-DEV.md"
   - "! [ -f ../.gitignore ] || grep -qxF '/DRUPAL-DEV.md' ../.gitignore || printf '\\n# ddev-drupal-dev cheat sheet\\n/DRUPAL-DEV.md\\n' >> ../.gitignore"
   # Clean up web commands from a previous install now that these commands
-  # have moved to commands/host/. Only remove files still marked as generated.
+  # have moved to commands/host/, or are no longer needed. Only remove files
+  # still marked as generated.
   - |
-    for cmd in add-module remove-module update-module; do
+    for cmd in add-module remove-module update-module dr; do
       f="commands/web/$cmd"
       if [ -f "$f" ] && grep -q '#ddev-generated' "$f"; then
         rm -f "$f"

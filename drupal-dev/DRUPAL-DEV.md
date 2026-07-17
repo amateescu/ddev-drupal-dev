@@ -47,14 +47,6 @@ ddev cspell core/modules/node/**       # spell checking (globs)
 Run any of them without arguments to check the whole codebase. `ddev cspell`
 needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
 
-## Drupal core CLI (core 11.4+)
-
-```bash
-ddev dr list                           # list available commands
-ddev dr install standard               # install a site
-ddev dr cr                             # rebuild caches
-```
-
 ## Pin core's exact dependency versions
 
 In `composer.local.json`:
