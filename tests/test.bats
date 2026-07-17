@@ -236,6 +236,46 @@ teardown() {
   run git -C "${TESTDIR}/modules/contrib/wse" symbolic-ref --short HEAD
   assert_output "2.0.x"
 
+  # switch: shows usage when the branch is missing
+  run ddev switch wse
+  assert_failure
+  assert_output --partial "Usage: ddev switch"
+
+  # switch: checks out the branch and updates the constraint in one step
+  run ddev switch wse 3.0.x
+  assert_success
+  run git -C "${TESTDIR}/modules/contrib/wse" symbolic-ref --short HEAD
+  assert_output "3.0.x"
+  run grep -o '"drupal/wse": "[^"]*"' "${TESTDIR}/composer.local.json"
+  assert_output --partial "3.0.x-dev"
+
+  # switch: rejects a module that was never cloned
+  run ddev switch nonexistent 1.0.x
+  assert_failure
+  assert_output --partial "is not a git checkout"
+
+  # Worktree checkouts work: .git is a file, not a directory
+  mv "${TESTDIR}/modules/contrib/wse" "${TESTDIR}/wse-main"
+  git -C "${TESTDIR}/wse-main" worktree add "${TESTDIR}/modules/contrib/wse" 2.0.x
+  assert [ -f "${TESTDIR}/modules/contrib/wse/.git" ]
+  run ddev update-module wse
+  assert_success
+  run grep -o '"drupal/wse": "[^"]*"' "${TESTDIR}/composer.local.json"
+  assert_output --partial "2.0.x-dev"
+
+  # remove-module guards a dirty worktree, then prunes it from the main repo
+  echo 'dirty' > "${TESTDIR}/modules/contrib/wse/dirty.txt"
+  run ddev remove-module wse
+  assert_failure
+  assert_output --partial "uncommitted or untracked"
+  rm "${TESTDIR}/modules/contrib/wse/dirty.txt"
+  run ddev remove-module wse
+  assert_success
+  assert_file_not_exists "${TESTDIR}/modules/contrib/wse"
+  run git -C "${TESTDIR}/wse-main" worktree list
+  refute_output --partial "modules/contrib/wse"
+  rm -rf "${TESTDIR}/wse-main"
+
   # Custom installer-paths: modules/ instead of modules/contrib/
   run ddev composer config extra.installer-paths.modules/\{\$name\} '["type:drupal-module"]' --json
   assert_success
@@ -292,6 +332,7 @@ teardown() {
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/add-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/switch"
 }
 
 @test "pin-core-lock" {

@@ -7,6 +7,8 @@
 
 set -e
 
+. "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
+
 if [ $# -eq 0 ]; then
   echo "Usage: ddev remove-module <module_name>"
   echo ""
@@ -20,23 +22,11 @@ fi
 
 MODULE_NAME="$1"
 
-if [[ ! "$MODULE_NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
-  echo "Error: Invalid module name '$MODULE_NAME'."
-  echo "Must start with a lowercase letter, contain only lowercase letters, numbers, and underscores."
-  exit 1
-fi
+validate_module_name "$MODULE_NAME" || exit 1
 
 cd "$DDEV_APPROOT"
 
-# Read the install path for drupal-module from Composer's installer-paths config.
-MODULE_DIR=$(ddev exec -- bash <<'EOF' | sed "s/{\\\$name}/$MODULE_NAME/"
-composer config extra.installer-paths --json 2>/dev/null \
-  | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null
-EOF
-)
-if [ -z "$MODULE_DIR" ]; then
-  MODULE_DIR="modules/contrib/$MODULE_NAME"
-fi
+MODULE_DIR=$(get_module_dir "$MODULE_NAME")
 
 # Check that the module was actually added.
 if [ ! -d "$MODULE_DIR" ] && ! ddev composer show "drupal/$MODULE_NAME" >/dev/null 2>&1; then
@@ -45,7 +35,7 @@ if [ ! -d "$MODULE_DIR" ] && ! ddev composer show "drupal/$MODULE_NAME" >/dev/nu
 fi
 
 # Check for uncommitted or untracked changes before proceeding.
-if [ -d "$MODULE_DIR/.git" ] && [ -n "$(git -C "$MODULE_DIR" status --porcelain 2>/dev/null)" ]; then
+if is_git_checkout "$MODULE_DIR" && [ -n "$(git -C "$MODULE_DIR" status --porcelain 2>/dev/null)" ]; then
   echo "Error: $MODULE_DIR has uncommitted or untracked changes."
   echo "Commit or stash your changes first, or delete the directory manually."
   exit 1
@@ -62,10 +52,18 @@ fi
 echo "Removing path repository..."
 ddev composer config --unset repositories.$MODULE_NAME || true
 
-# Delete the cloned directory.
+# Delete the cloned directory. For a worktree, remember the main repo first
+# so its stale worktree entry can be pruned after deletion.
 if [ -d "$MODULE_DIR" ]; then
+  GIT_COMMON_DIR=""
+  if [ -f "$MODULE_DIR/.git" ]; then
+    GIT_COMMON_DIR=$(git -C "$MODULE_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  fi
   echo "Deleting $MODULE_DIR..."
   rm -rf "$MODULE_DIR"
+  if [ -n "$GIT_COMMON_DIR" ]; then
+    git --git-dir="$GIT_COMMON_DIR" worktree prune 2>/dev/null || true
+  fi
 fi
 
 echo ""

@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Switch core or a contrib module to another git branch and update dependencies
+## Usage: switch <project> <branch>
+## Example: "ddev switch core 11.x" or "ddev switch token 2.0.x"
+
+set -e
+
+. "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
+
+if [ $# -lt 2 ]; then
+  echo "Usage: ddev switch <project> <branch>"
+  echo ""
+  echo "Switches a project's git branch and updates Composer to match."
+  echo "Use 'core' for the core checkout, or a module name for a contrib"
+  echo "module cloned with 'ddev add-module'."
+  echo ""
+  echo "Examples:"
+  echo "  ddev switch core 11.x        # switch core, then composer update"
+  echo "  ddev switch token 2.0.x      # switch token, then update its constraint"
+  exit 1
+fi
+
+PROJECT="$1"
+BRANCH="$2"
+
+cd "$DDEV_APPROOT"
+
+if [ "$PROJECT" = "core" ]; then
+  if ! is_git_checkout .; then
+    echo "Error: $DDEV_APPROOT is not a git checkout."
+    exit 1
+  fi
+
+  echo "Switching core to $BRANCH..."
+  git switch "$BRANCH"
+  sync_container
+
+  echo "Updating dependencies..."
+  ddev composer update
+
+  echo ""
+  printf '\033[32m  Done! core is now on %s\033[0m\n' "$BRANCH"
+  exit 0
+fi
+
+# Anything else is treated as a contrib module.
+MODULE_NAME="$PROJECT"
+
+validate_module_name "$MODULE_NAME" || {
+  echo "Use 'core' to switch the core checkout."
+  exit 1
+}
+
+MODULE_DIR=$(get_module_dir "$MODULE_NAME")
+
+if ! is_git_checkout "$MODULE_DIR"; then
+  echo "Error: $MODULE_DIR is not a git checkout."
+  echo "Use 'ddev add-module $MODULE_NAME' to clone it first."
+  exit 1
+fi
+
+echo "Switching drupal/$MODULE_NAME to $BRANCH..."
+git -C "$MODULE_DIR" switch "$BRANCH"
+sync_container
+
+# Find the dev version that matches the new branch, so the constraint follows
+# the checkout.
+COMPOSER_VERSION=$(find_composer_dev_version "$MODULE_NAME" "$BRANCH")
+
+echo "Updating drupal/$MODULE_NAME to $COMPOSER_VERSION (branch: $BRANCH)..."
+ddev composer require --no-interaction --update-with-all-dependencies "drupal/$MODULE_NAME:$COMPOSER_VERSION"
+
+echo ""
+printf '\033[32m  Done! drupal/%s is now on %s (%s)\033[0m\n' "$MODULE_NAME" "$BRANCH" "$COMPOSER_VERSION"

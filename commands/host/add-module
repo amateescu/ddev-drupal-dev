@@ -7,6 +7,8 @@
 
 set -e
 
+. "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
+
 USE_HTTPS=false
 
 # Parse flags.
@@ -38,28 +40,16 @@ fi
 MODULE_NAME="$1"
 BRANCH="$2"
 
-if [[ ! "$MODULE_NAME" =~ ^[a-z][a-z0-9_]*$ ]]; then
-  echo "Error: Invalid module name '$MODULE_NAME'."
-  echo "Must start with a lowercase letter, contain only lowercase letters, numbers, and underscores."
-  exit 1
-fi
+validate_module_name "$MODULE_NAME" || exit 1
 
 cd "$DDEV_APPROOT"
 
-# Read the install path for drupal-module from Composer's installer-paths config.
-MODULE_DIR=$(ddev exec -- bash <<'EOF' | sed "s/{\\\$name}/$MODULE_NAME/"
-composer config extra.installer-paths --json 2>/dev/null \
-  | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null
-EOF
-)
-if [ -z "$MODULE_DIR" ]; then
-  MODULE_DIR="modules/contrib/$MODULE_NAME"
-fi
+MODULE_DIR=$(get_module_dir "$MODULE_NAME")
 DRUPAL_GIT_HTTPS="https://git.drupalcode.org/project/$MODULE_NAME.git"
 DRUPAL_GIT_SSH="git@git.drupal.org:project/$MODULE_NAME.git"
 
 if [ -d "$MODULE_DIR" ]; then
-  if [ ! -d "$MODULE_DIR/.git" ]; then
+  if ! is_git_checkout "$MODULE_DIR"; then
     echo "Error: $MODULE_DIR already exists but is not a git checkout."
     echo "Remove it first with: ddev remove-module $MODULE_NAME"
     exit 1
@@ -104,38 +94,15 @@ else
   fi
 
   # Ensure the clone is visible inside the container before composer reads it.
-  ddev mutagen sync >/dev/null 2>&1 || true
+  sync_container
 fi
 
-# Find the dev version from the canonical Drupal Composer repo that matches
-# our branch, so the lock file records the correct dev version.
-DEV_VERSIONS=$(ddev exec -- bash <<EOF | grep -E '\-dev$|^dev-' || true
-composer show --all "drupal/$MODULE_NAME" --format=json 2>/dev/null | jq -r '.versions[]' 2>/dev/null
-EOF
-)
-COMPOSER_VERSION=""
-# Try direct match: 2.0.x → 2.0.x-dev
-if echo "$DEV_VERSIONS" | grep -qx "${BRANCH}-dev"; then
-  COMPOSER_VERSION="${BRANCH}-dev"
-# Try dev- prefix: main → dev-main
-elif echo "$DEV_VERSIONS" | grep -qx "dev-${BRANCH}"; then
-  COMPOSER_VERSION="dev-${BRANCH}"
-# Try legacy Drupal format: 8.x-1.x → strip prefix → 1.x-dev
-elif [[ "$BRANCH" =~ ^[0-9]+\.x-(.+)$ ]]; then
-  STRIPPED="${BASH_REMATCH[1]}"
-  if echo "$DEV_VERSIONS" | grep -qx "${STRIPPED}-dev"; then
-    COMPOSER_VERSION="${STRIPPED}-dev"
-  elif echo "$DEV_VERSIONS" | grep -qx "dev-${STRIPPED}"; then
-    COMPOSER_VERSION="dev-${STRIPPED}"
-  fi
-fi
-if [ -z "$COMPOSER_VERSION" ]; then
-  COMPOSER_VERSION="*"
-fi
+# Find the dev version that matches our branch, so the lock file records the
+# correct dev version.
+COMPOSER_VERSION=$(find_composer_dev_version "$MODULE_NAME" "$BRANCH")
 
 # Register as a path repository and require it. The composer-git-installer
-# plugin detects the .git directory and skips the download, preserving
-# the checkout.
+# plugin detects the git checkout and skips the download, preserving it.
 echo "Adding path repository and requiring drupal/$MODULE_NAME..."
 ddev composer config repositories.$MODULE_NAME path "$MODULE_DIR"
 ddev composer require --no-interaction --update-with-all-dependencies "drupal/$MODULE_NAME:$COMPOSER_VERSION"
