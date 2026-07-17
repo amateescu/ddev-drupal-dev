@@ -6,6 +6,7 @@ project_files:
   - drupal-dev/composer.local.json
   - drupal-dev/envrc
   - drupal-dev/shell-helpers.sh
+  - drupal-dev/command-helpers.sh
   - drupal-dev/gitignore
   - drupal-dev/DRUPAL-DEV.md
   - drupal-dev/composer-plugin
@@ -13,6 +14,7 @@ project_files:
   - commands/host/add-module
   - commands/host/update-module
   - commands/host/remove-module
+  - commands/host/switch
   - commands/web/phpstan
   - commands/web/phpcs
   - commands/web/cspell

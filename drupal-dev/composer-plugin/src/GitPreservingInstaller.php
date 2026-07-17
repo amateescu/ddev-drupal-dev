@@ -75,10 +75,13 @@ class GitPreservingInstaller extends LibraryInstaller
 
     /**
      * Check if the install path has a git checkout.
+     *
+     * .git is a directory in a normal clone and a file in a git worktree;
+     * accept both.
      */
     private function hasGitCheckout(PackageInterface $package): bool
     {
-        return is_dir($this->getInstallPath($package) . '/.git');
+        return file_exists($this->getInstallPath($package) . '/.git');
     }
 
     /**
