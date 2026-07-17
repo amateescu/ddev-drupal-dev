@@ -114,16 +114,6 @@ ddev phpunit modules/contrib/token              # contrib module tests
 
 For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgres) add-on first.
 
-## Drupal core CLI
-
-Drupal core 11.4+ ships its own CLI called `dr`. The add-on exposes it as a DDEV command:
-
-```bash
-ddev dr list                           # list available commands
-ddev dr install standard               # install a site
-ddev dr cr                             # rebuild caches
-```
-
 ## Code quality checks
 
 PHPStan, PHP CodeSniffer and cspell run with core's own configuration:
@@ -177,7 +167,6 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | Command | Description |
 | ------- | ----------- |
 | `ddev phpunit [path]` | Run PHPUnit tests |
-| `ddev dr [command]` | Run Drupal core's `dr` CLI (core 11.4+) |
 | `ddev phpstan [paths]` | Run PHPStan with core's configuration |
 | `ddev phpcs [paths]` | Run PHP CodeSniffer with core's coding standard |
 | `ddev cspell [globs]` | Run cspell with core's dictionaries |
