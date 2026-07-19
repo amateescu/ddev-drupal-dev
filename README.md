@@ -229,6 +229,8 @@ ddev composer install
 
 ## Upgrading
 
+To upgrade, run `ddev add-on get amateescu/ddev-drupal-dev`.
+
 When upgrading the add-on, your `composer.local.json` is preserved (it contains your modules and custom packages). If a new version of the add-on introduces changes to the base `composer.local.json`, check `.ddev/drupal-dev/composer.local.json` for any new dependencies and add them manually.
 
 ## Comparison with other add-ons
