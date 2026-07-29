@@ -152,6 +152,17 @@ teardown() {
   run ddev phpunit --db=oracle core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_failure
   assert_output --partial "Unknown database type"
+
+  # commit-code-check finds core's script and passes flags through to it
+  run ddev commit-code-check --help
+  assert_success
+  assert_output --partial "Drupal code quality checks"
+
+  # The checkout is clean here, so the script has nothing to check. Running the
+  # actual checks would need core's node dependencies.
+  run ddev commit-code-check
+  assert_success
+  assert_output --partial "There are no files to check"
 }
 
 # bats test_tags=release

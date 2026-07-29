@@ -146,6 +146,19 @@ ddev cspell                            # whole codebase
 
 `ddev cspell` needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
 
+### Checking a change before committing
+
+`ddev commit-code-check` runs core's own `core/scripts/dev/commit-code-check.sh`, which checks *only the files you changed* with cspell, PHPCS, PHPStan, ESLint, Stylelint and a few file checks (file modes, no `vendor/` or `core/node_modules/` changes):
+
+```bash
+ddev commit-code-check                 # modified and untracked files in the working directory
+ddev commit-code-check --cached        # staged files only
+ddev commit-code-check --branch 11.x   # everything your branch changed compared to 11.x
+ddev commit-code-check --memory-unlimited   # bypass the PHP memory limit
+```
+
+There has to be something to check: on a clean checkout it prints "There are no files to check" and stops. The spelling and JavaScript checks run through yarn, so the first run installs core's node dependencies, which takes a few minutes.
+
 ## Adding other packages
 
 Any package can be added through the overlay:
@@ -187,6 +200,7 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | `ddev phpstan [paths]` | Run PHPStan with core's configuration |
 | `ddev phpcs [paths]` | Run PHP CodeSniffer with core's coding standard |
 | `ddev cspell [globs]` | Run cspell with core's dictionaries |
+| `ddev commit-code-check [flags]` | Run core's pre-commit checks on your changed files |
 | `ddev add-module <name>` | Clone a contrib module for development |
 | `ddev switch <project> <branch>` | Switch core or a module to a branch and update dependencies |
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |

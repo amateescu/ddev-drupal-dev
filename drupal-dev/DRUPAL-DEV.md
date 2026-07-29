@@ -54,6 +54,14 @@ ddev cspell core/modules/node/**       # spell checking (globs)
 Run any of them without arguments to check the whole codebase. `ddev cspell`
 needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
 
+Core's pre-commit script, on your changed files only:
+
+```bash
+ddev commit-code-check                 # working directory changes
+ddev commit-code-check --cached        # staged files only
+ddev commit-code-check --branch 11.x   # changes compared to a branch
+```
+
 ## Pin core's exact dependency versions
 
 In `composer.local.json`:
