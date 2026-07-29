@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run Drupal core's commit-code-check script
+## Usage: commit-code-check [flags]
+## Example: "ddev commit-code-check --memory-unlimited" or "ddev commit-code-checks" for the default
+
+exec core/scripts/dev/commit-code-check.sh "$@"
