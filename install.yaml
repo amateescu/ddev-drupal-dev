@@ -18,6 +18,7 @@ project_files:
   - commands/web/phpstan
   - commands/web/phpcs
   - commands/web/cspell
+  - commands/web/commit-code-check
   - docker-compose.drupal-dev-selenium.yaml
   - config.drupal-dev.yaml
 
