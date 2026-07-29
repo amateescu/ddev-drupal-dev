@@ -93,6 +93,9 @@ else
     exit 1
   fi
 
+  # Set checkout.defaultRemote to origin for the contrib module repo if not set yet
+  if [ -z "$(git -C $MODULE_DIR config --get checkout.defaultRemote)" ]; then git config set checkout.defaultRemote origin; echo "checkout.defaultRemote set to origin"; fi
+  
   # Ensure the clone is visible inside the container before composer reads it.
   sync_container
 fi

@@ -30,6 +30,12 @@ ddev restart
 ddev composer install
 ```
 
+In case the `checkout.defaultRemote` is not set in the config of either the Drupal core or contrib module git repo, it is set to `origin` by default after cloning. If you have to change the remote apply the following command in the respective project root. 
+
+```bash
+git config set checkout.defaultRemote [name]
+```
+
 ## Working on contrib modules
 
 Use `ddev add-module` to clone a contrib module for development:

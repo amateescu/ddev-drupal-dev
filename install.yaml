@@ -43,6 +43,8 @@ post_install_actions:
     rmdir commands/web 2>/dev/null || true
   # Create test output directory
   - mkdir -p ../test_output
+  # Set checkout.defaultRemote to origin for Drupal core if not set yet
+  - if [ -z "$(git config --get checkout.defaultRemote)" ]; then git config set checkout.defaultRemote origin; echo "checkout.defaultRemote set to origin"; fi
   # User-friendly post-install message
   - |
     printf '\n'
@@ -68,3 +70,4 @@ removal_actions:
   - "grep -q '#ddev-generated' ../DRUPAL-DEV.md 2>/dev/null && rm -f ../DRUPAL-DEV.md || true"
   - "[ -f ../.gitignore ] && sed -i.bak -e '/^# ddev-drupal-dev cheat sheet$/d' -e '/^\\/DRUPAL-DEV\\.md$/d' ../.gitignore && rm -f ../.gitignore.bak || true"
   - rm -rf ../test_output
+  - git config unset checkout.defaultRemote
