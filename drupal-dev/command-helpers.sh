@@ -125,17 +125,20 @@ switch_to_branch() {
   remote=$(canonical_remote "$dir" "$project" "$branch") && status=0 || status=$?
 
   if [ "$status" -eq 1 ]; then
-    echo "Error: branch '$branch' does not exist locally or on any remote."
-    echo "Fetch the remotes first: $git_cmd fetch --all"
+    echo "Error: branch '$branch' is not in this checkout, neither locally nor on"
+    echo "any remote you have fetched. If it exists on drupal.org, fetch it first:"
+    echo "  $git_cmd fetch --all"
     return 1
   fi
 
   if [ "$status" -eq 2 ]; then
-    echo "Error: branch '$branch' exists on several remotes and none of them is"
-    echo "the canonical drupal.org repository for '$project':"
+    echo "Error: several remotes have a branch called '$branch', and none of them"
+    echo "looks like the drupal.org repository for '$project':"
     remotes_with_branch "$dir" "$branch" | sed 's/^/  /'
-    echo "Pick one with: $git_cmd switch --track <remote>/$branch"
-    echo "Or set a default: $git_cmd config checkout.defaultRemote <remote>"
+    echo "Pick the one you want:"
+    echo "  $git_cmd switch --track <remote>/$branch"
+    echo "Or make that choice stick for every ambiguous branch:"
+    echo "  $git_cmd config checkout.defaultRemote <remote>"
     return 1
   fi
 
