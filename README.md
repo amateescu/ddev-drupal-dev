@@ -148,6 +148,8 @@ ddev cspell                            # whole codebase
 
 `ddev cspell` needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
 
+`ddev phpstan` analyses against the PHP version core declares in `config.platform`, not the container's runtime version, so results match what core's CI reports.
+
 ### Checking a change before committing
 
 `ddev commit-code-check` runs core's own `core/scripts/dev/commit-code-check.sh`, which checks *only the files you changed* with cspell, PHPCS, PHPStan, ESLint, Stylelint and a few file checks (file modes, no `vendor/` or `core/node_modules/` changes):
@@ -248,6 +250,8 @@ ddev composer install
 To upgrade, run `ddev add-on get amateescu/ddev-drupal-dev`.
 
 When upgrading the add-on, your `composer.local.json` is preserved (it contains your modules and custom packages). If a new version of the add-on introduces changes to the base `composer.local.json`, check `.ddev/drupal-dev/composer.local.json` for any new dependencies and add them manually.
+
+Earlier versions mirrored core's `config.platform` into `composer.local.json`, which constrained every package in the overlay to core's minimum PHP version. That setting is removed on the next Composer run. Your `composer.local.lock` also recorded it as `platform-overrides`, so run `ddev composer update` once to solve without it.
 
 ## Comparison with other add-ons
 
