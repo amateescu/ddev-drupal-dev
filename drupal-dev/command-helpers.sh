@@ -59,6 +59,92 @@ EOF
   echo "${version:-*}"
 }
 
+# Echoes the remotes that have a branch, one per line.
+remotes_with_branch() {
+  local dir="$1" branch="$2" remote
+  while read -r remote; do
+    if git -C "$dir" show-ref --verify --quiet "refs/remotes/$remote/$branch"; then
+      echo "$remote"
+    fi
+  done < <(git -C "$dir" remote)
+}
+
+# Echoes the remote that a new local branch should track. Returns 1 when no
+# remote has the branch and 2 when several do and none of them stands out.
+#
+# Drupal issue forks carry the same branch names as the canonical project repo,
+# so git's own guess ("git switch 11.x" with no local branch) fails as soon as
+# one fork remote is fetched. Forks live under issue/<project>-<nid>, the
+# canonical repo under project/<project>, which is what tells them apart.
+canonical_remote() {
+  local dir="$1" project="$2" branch="$3" candidates remote preferred
+  candidates=$(remotes_with_branch "$dir" "$branch")
+
+  if [ -z "$candidates" ]; then
+    return 1
+  fi
+
+  while read -r remote; do
+    if [[ "$(git -C "$dir" remote get-url "$remote")" =~ [:/]project/$project(\.git)?/?$ ]]; then
+      echo "$remote"
+      return 0
+    fi
+  done <<< "$candidates"
+
+  # No canonical remote, so fall back to the user's own preference, then origin.
+  for preferred in "$(git -C "$dir" config --get checkout.defaultRemote || true)" origin; do
+    if [ -n "$preferred" ] && echo "$candidates" | grep -qxF "$preferred"; then
+      echo "$preferred"
+      return 0
+    fi
+  done
+
+  # A single candidate is unambiguous, whatever it is called.
+  if [ "$(echo "$candidates" | wc -l)" -eq 1 ]; then
+    echo "$candidates"
+    return 0
+  fi
+
+  return 2
+}
+
+# Switches a repo to a branch, creating it from the canonical remote when there
+# is no local branch of that name yet.
+switch_to_branch() {
+  local dir="$1" project="$2" branch="$3" remote status git_cmd
+
+  # Nothing to resolve when the branch is already local.
+  if git -C "$dir" show-ref --verify --quiet "refs/heads/$branch"; then
+    git -C "$dir" switch "$branch"
+    return
+  fi
+
+  git_cmd="git"
+  [ "$dir" = "." ] || git_cmd="git -C $dir"
+
+  remote=$(canonical_remote "$dir" "$project" "$branch") && status=0 || status=$?
+
+  if [ "$status" -eq 1 ]; then
+    echo "Error: branch '$branch' is not in this checkout, neither locally nor on"
+    echo "any remote you have fetched. If it exists on drupal.org, fetch it first:"
+    echo "  $git_cmd fetch --all"
+    return 1
+  fi
+
+  if [ "$status" -eq 2 ]; then
+    echo "Error: several remotes have a branch called '$branch', and none of them"
+    echo "looks like the drupal.org repository for '$project':"
+    remotes_with_branch "$dir" "$branch" | sed 's/^/  /'
+    echo "Pick the one you want:"
+    echo "  $git_cmd switch --track <remote>/$branch"
+    echo "Or make that choice stick for every ambiguous branch:"
+    echo "  $git_cmd config checkout.defaultRemote <remote>"
+    return 1
+  fi
+
+  git -C "$dir" switch --track "$remote/$branch"
+}
+
 # A branch switch or fresh clone can change thousands of files. Let Mutagen
 # settle so the container sees them before Composer runs. No-op when Mutagen
 # is not in use.

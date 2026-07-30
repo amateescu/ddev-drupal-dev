@@ -265,6 +265,27 @@ teardown() {
   assert_failure
   assert_output --partial "is not a git checkout"
 
+  # switch: picks the canonical remote when issue forks carry the same branch
+  # names. Faking a fork remote is enough: the URL namespace tells forks apart
+  # from the project repo, and the tracking ref is all a branch switch reads.
+  git -C "${TESTDIR}/modules/contrib/wse" branch -D 2.0.x
+  git -C "${TESTDIR}/modules/contrib/wse" remote add drupal-123456 https://git.drupalcode.org/issue/wse-123456.git
+  git -C "${TESTDIR}/modules/contrib/wse" update-ref refs/remotes/drupal-123456/2.0.x refs/remotes/origin/2.0.x
+
+  # Plain git cannot resolve the branch any more.
+  run git -C "${TESTDIR}/modules/contrib/wse" switch 2.0.x
+  assert_failure
+  assert_output --partial "matched multiple"
+
+  run ddev switch wse 2.0.x
+  assert_success
+  run git -C "${TESTDIR}/modules/contrib/wse" rev-parse --abbrev-ref '@{upstream}'
+  assert_output "origin/2.0.x"
+
+  # Drop the fake fork, and leave 2.0.x unoccupied for the worktree below.
+  git -C "${TESTDIR}/modules/contrib/wse" remote remove drupal-123456
+  git -C "${TESTDIR}/modules/contrib/wse" switch 3.0.x
+
   # Worktree checkouts work: .git is a file, not a directory
   mv "${TESTDIR}/modules/contrib/wse" "${TESTDIR}/wse-main"
   git -C "${TESTDIR}/wse-main" worktree add "${TESTDIR}/modules/contrib/wse" 2.0.x
