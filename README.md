@@ -96,6 +96,8 @@ ddev switch core 11.x
 
 This runs `git switch`, syncs the container, and runs `ddev composer update`. The equivalent by hand is `git switch 11.x && ddev composer update`.
 
+Branches that don't exist locally yet are created from the canonical drupal.org repository. Issue fork remotes carry the same branch names, so a plain `git switch 11.x` fails with "matched multiple remote tracking branches" once you have a few forks fetched; `ddev switch` picks the project repository instead. This works the same way for contrib modules.
+
 ## Reproducing core's exact dependency versions
 
 When reproducing a core bug or validating a patch, you sometimes need the same resolved dependency versions as core's `composer.lock`. By default the overlay's solver runs fresh, so shared packages (Symfony, Guzzle, etc.) may resolve to newer versions than core recorded.

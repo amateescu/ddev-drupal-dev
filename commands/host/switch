@@ -34,7 +34,7 @@ if [ "$PROJECT" = "core" ]; then
   fi
 
   echo "Switching core to $BRANCH..."
-  git switch "$BRANCH"
+  switch_to_branch . drupal "$BRANCH"
   sync_container
 
   echo "Updating dependencies..."
@@ -62,7 +62,7 @@ if ! is_git_checkout "$MODULE_DIR"; then
 fi
 
 echo "Switching drupal/$MODULE_NAME to $BRANCH..."
-git -C "$MODULE_DIR" switch "$BRANCH"
+switch_to_branch "$MODULE_DIR" "$MODULE_NAME" "$BRANCH"
 sync_container
 
 # Find the dev version that matches the new branch, so the constraint follows
