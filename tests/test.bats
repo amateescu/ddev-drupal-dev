@@ -453,32 +453,53 @@ PY
     skip "core composer.json does not declare config.platform"
   fi
 
-  # The plugin must sync config.platform from composer.json into composer.local.json
-  # so that tools like PHPStan, which read the root composer file directly, pick
-  # up the correct platform PHP version instead of falling back to the runtime.
+  # config.platform must stay out of composer.local.json. A platform there
+  # constrains the solver and install-time checks for the whole overlay, so
+  # packages needing a newer PHP than core's minimum become uninstallable.
+  run python3 -c "import json; print('platform' in json.load(open('${TESTDIR}/composer.local.json')).get('config', {}))"
+  assert_output "False"
+
+  # PHPStan still analyses against core's declared version, because the command
+  # points it at core's composer.json. -vvv emits
+  # "PHP version for analysis: X.Y (from config.platform.php in composer.json)"
   core_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.json'))['config']['platform']['php'])")
-  overlay_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.local.json'))['config']['platform']['php'])")
-  [ "${core_platform}" = "${overlay_platform}" ]
-
-  # PHPStan must report the platform version, not the runtime version.
-  # -vvv emits "PHP version for analysis: X.Y (from config.platform.php in composer.json)"
-  run ddev exec vendor/bin/phpstan -vvv analyze --configuration=core/phpstan.neon.dist -- core/lib/Drupal/Core/Entity/EntityInterface.php
+  run ddev phpstan -vvv core/lib/Drupal/Core/Entity/EntityInterface.php
   assert_success
-  assert_output --partial "from config.platform.php"
+  assert_output --partial "PHP version for analysis: ${core_platform%.*} (from config.platform.php"
 
-  # A platform change in core (e.g. after a branch switch) propagates to
-  # composer.local.json on the next composer run.
-  python3 -c "import json; p='${TESTDIR}/composer.json'; d=json.load(open(p)); d['config']['platform']['php']='8.3.99'; json.dump(d, open(p, 'w'), indent=4)"
-  run ddev composer install
+  # A config.platform left behind by an older version of the add-on, which
+  # mirrored core's value into the overlay, is removed on the next composer run.
+  python3 -c "
+import json
+core = json.load(open('${TESTDIR}/composer.json'))['config']['platform']
+p = '${TESTDIR}/composer.local.json'
+d = json.load(open(p))
+d.setdefault('config', {})['platform'] = core
+json.dump(d, open(p, 'w'), indent=4)
+"
+  run ddev composer show drupal/core
+  assert_success
+  assert_output --partial "Removed config.platform"
+  run python3 -c "import json; print('platform' in json.load(open('${TESTDIR}/composer.local.json')).get('config', {}))"
+  assert_output "False"
+
+  # A platform the user set themselves is left alone.
+  python3 -c "
+import json
+p = '${TESTDIR}/composer.local.json'
+d = json.load(open(p))
+d.setdefault('config', {})['platform'] = {'php': '8.3.99'}
+json.dump(d, open(p, 'w'), indent=4)
+"
+  run ddev composer show drupal/core
   assert_success
   overlay_platform=$(python3 -c "import json; print(json.load(open('${TESTDIR}/composer.local.json'))['config']['platform']['php'])")
   [ "${overlay_platform}" = "8.3.99" ]
-
-  # When core stops declaring config.platform, the stale value is removed from
-  # composer.local.json so tools fall back to the runtime version.
-  python3 -c "import json; p='${TESTDIR}/composer.json'; d=json.load(open(p)); d['config'].pop('platform'); json.dump(d, open(p, 'w'), indent=4)"
-  run ddev composer install
-  assert_success
-  run python3 -c "import json; print('platform' in json.load(open('${TESTDIR}/composer.local.json')).get('config', {}))"
-  assert_output "False"
+  python3 -c "
+import json
+p = '${TESTDIR}/composer.local.json'
+d = json.load(open(p))
+d['config'].pop('platform')
+json.dump(d, open(p, 'w'), indent=4)
+"
 }

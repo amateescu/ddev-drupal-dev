@@ -5,7 +5,6 @@ namespace DrupalDev\ComposerGitInstaller;
 
 use Composer\Composer;
 use Composer\EventDispatcher\EventSubscriberInterface;
-use Composer\Factory;
 use Composer\IO\IOInterface;
 use Composer\Json\JsonFile;
 use Composer\Package\AliasPackage;
@@ -43,13 +42,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface
                 $composer->getPackage()->setExtra($rootExtra);
             }
 
-            // Mirror core's config.platform so composer resolves dependencies
-            // against core's declared PHP version instead of the runtime one.
-            // composer-merge-plugin only merges package metadata, not config.
             $platform = $coreConfig['config']['platform'] ?? [];
-            if (is_array($platform)) {
-                $composer->getConfig()->merge(['config' => ['platform' => $platform]], $coreFile);
-                $this->syncPlatformToRootFile($platform);
+            if (is_array($platform) && $platform !== []) {
+                $this->dropSyncedPlatformFromRootFile($platform);
             }
         }
 
@@ -130,91 +125,48 @@ class Plugin implements PluginInterface, EventSubscriberInterface
     }
 
     /**
-     * Mirror config.platform into the root composer file (composer.local.json).
+     * Remove a config.platform that an older version of this plugin wrote into
+     * the root composer file (composer.local.json).
      *
-     * PHPStan runs in its own process and reads config.platform straight from
-     * the root composer file (via the $COMPOSER env var), so the in-memory
-     * Config merge is not visible to it. Adds, updates or removes the setting
-     * so the file always matches core, and only writes when the value changed.
+     * A platform in the root file constrains the solver and install-time checks
+     * for everything in the overlay, so packages needing a newer PHP than
+     * core's declared minimum become uninstallable, and an existing lock built
+     * without the pin stops satisfying it. PHPStan gets core's version from
+     * core's own composer.json instead, through the phpstan command.
+     *
+     * Only removes a value identical to core's, which is what the old sync
+     * wrote. A platform the user set themselves is left alone.
      *
      * @param array<string, string> $platform
      */
-    private function syncPlatformToRootFile(array $platform): void
+    private function dropSyncedPlatformFromRootFile(array $platform): void
     {
         $configSource = $this->composer->getConfig()->getConfigSource();
         $rootFile = $configSource->getName();
 
-        // Only act when the root file is an overlay separate from the core
-        // composer.json we just read.
+        // Only act on an overlay separate from the core composer.json.
         if (basename($rootFile) === 'composer.json' || !file_exists($rootFile)) {
             return;
         }
 
-        $oldContents = (string) file_get_contents($rootFile);
-        $rootData = json_decode($oldContents, true);
-        if (!is_array($rootData)) {
+        $rootData = json_decode((string) file_get_contents($rootFile), true);
+        if (!is_array($rootData) || ($rootData['config']['platform'] ?? null) !== $platform) {
             return;
         }
 
-        $current = $rootData['config']['platform'] ?? null;
-        if ($platform === []) {
-            if ($current === null) {
-                return;
-            }
-            $configSource->removeConfigSetting('platform');
-            $this->io->writeError('<info>Removed config.platform from ' . basename($rootFile) . ' because core no longer declares one.</info>');
-        } else {
-            if ($current === $platform) {
-                return;
-            }
-            $configSource->addConfigSetting('platform', $platform);
-            $this->io->writeError('<info>Synced config.platform from core composer.json into ' . basename($rootFile) . '.</info>');
-        }
+        $configSource->removeConfigSetting('platform');
+        $this->io->writeError('<info>Removed config.platform from ' . basename($rootFile) . '. It was mirrored from core and constrained every package in the overlay.</info>');
 
-        $this->refreshLockContentHash($rootFile, $oldContents);
-    }
-
-    /**
-     * Keep lock content hashes consistent after the root composer file changed
-     * on disk during plugin activation.
-     *
-     * config.platform is part of the lock's content hash and the Locker
-     * snapshots the root file before plugins are activated, so without a
-     * refresh every install after a platform sync warns that the lock file is
-     * out of date. Updates the Locker's in-memory hash for lock files written
-     * later in this run, and re-stamps the lock file on disk when the sync is
-     * the only divergence. Any other divergence, like a manual edit to the
-     * root file, keeps the warning.
-     */
-    private function refreshLockContentHash(string $rootFile, string $oldContents): void
-    {
-        $locker = $this->composer->getLocker();
-        if (!$locker) {
-            return;
-        }
-
-        // The content hash is private with no setter, so reflect.
-        $newHash = Locker::getContentHash((string) file_get_contents($rootFile));
-        $reflection = new \ReflectionClass($locker);
-        if ($reflection->hasProperty('contentHash')) {
-            $reflection->getProperty('contentHash')->setValue($locker, $newHash);
-        }
-
-        $lockFile = Factory::getLockFile($rootFile);
+        // The lock records the platform it was solved with, and install honours
+        // that, so a lock written while the mirror was in place stays stuck
+        // until it is solved again.
+        $lockFile = substr($rootFile, 0, -strlen('.json')) . '.lock';
         if (!file_exists($lockFile)) {
             return;
         }
         $lockData = json_decode((string) file_get_contents($lockFile), true);
-        if (!is_array($lockData) || ($lockData['content-hash'] ?? null) !== Locker::getContentHash($oldContents)) {
-            return;
-        }
-        if (!method_exists($locker, 'updateHash')) {
-            return;
-        }
-        try {
-            $locker->updateHash(new JsonFile($rootFile, null, $this->io));
-        } catch (\Exception $e) {
-            // A lock file that cannot be read or parsed is left alone.
+        if (is_array($lockData) && ($lockData['platform-overrides'] ?? null) === $platform) {
+            $this->io->writeError('<info>Run "ddev composer update" once to drop the matching platform-overrides from ' . basename($lockFile) . '.</info>');
         }
     }
 

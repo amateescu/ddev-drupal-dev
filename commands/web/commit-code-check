@@ -5,4 +5,9 @@
 ## Usage: commit-code-check [flags]
 ## Example: "ddev commit-code-check --cached" for staged files or "ddev commit-code-check" for all working directory changes
 
+# The script runs PHPStan, which reads config.platform from the composer file
+# that $COMPOSER points at. Point it at core's composer.json so the analysis
+# uses the PHP version core declares. The script itself never runs composer.
+export COMPOSER=composer.json
+
 exec "${DDEV_DOCROOT:+$DDEV_DOCROOT/}core/scripts/dev/commit-code-check.sh" "$@"
