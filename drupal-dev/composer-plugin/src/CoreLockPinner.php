@@ -15,7 +15,7 @@ use Composer\Plugin\PrePoolCreateEvent;
 
 /**
  * Pins the solver's pool to core's composer.lock versions for packages both
- * core and the overlay require.
+ * core and the overlay require, from require and require-dev alike.
  *
  * Activated by extra.drupal-dev.pin-core-lock in the overlay composer file.
  * Reads core's composer.lock fresh on every install and filters the solver's
@@ -77,9 +77,13 @@ class CoreLockPinner implements EventSubscriberInterface
         // both under the same name lets the pool filter accept either
         // version, and AliasPackage proxies its references to the underlying
         // package so dev-ref pinning works through the wrapper.
+        //
+        // Pass true so core's packages-dev entries are included. Most of the
+        // tooling worth pinning (PHPUnit, PHPStan and its extensions, PHPCS)
+        // sits in core's require-dev.
         /** @var array<string, list<\Composer\Package\PackageInterface>> $locked */
         $locked = [];
-        foreach ($locker->getLockedRepository()->getPackages() as $pkg) {
+        foreach ($locker->getLockedRepository(true)->getPackages() as $pkg) {
             $locked[$pkg->getName()][] = $pkg;
         }
 

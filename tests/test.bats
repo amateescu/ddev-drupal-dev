@@ -70,6 +70,12 @@ assert_git_checkout() {
   assert_output --partial "https://git.drupalcode.org"
 }
 
+# Print the locked version of a package, looking in both the prod and dev
+# sections of a composer.lock. Usage: locked_version <lock file> <package>.
+locked_version() {
+  python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(next(p['version'] for s in ('packages','packages-dev') for p in d.get(s,[]) if p['name']==sys.argv[2]))" "$1" "$2"
+}
+
 health_checks() {
   # Verify composer.local.json exists in project root
   assert_file_exists "${TESTDIR}/composer.local.json"
@@ -386,9 +392,10 @@ teardown() {
   run ddev composer install
   assert_success
   assert_output --partial "Core lock pinning active"
-  core_version=$(python3 -c "import json; d=json.load(open('${TESTDIR}/composer.lock')); print(next(p['version'] for p in d['packages'] if p['name']=='symfony/error-handler'))")
-  overlay_version=$(python3 -c "import json; d=json.load(open('${TESTDIR}/composer.local.lock')); print(next(p['version'] for p in d['packages'] if p['name']=='symfony/error-handler'))")
-  [ "${core_version}" = "${overlay_version}" ]
+  [ "$(locked_version "${TESTDIR}/composer.lock" symfony/error-handler)" = "$(locked_version "${TESTDIR}/composer.local.lock" symfony/error-handler)" ]
+
+  # Packages from core's require-dev are pinned too, not just require.
+  [ "$(locked_version "${TESTDIR}/composer.lock" mglaman/phpstan-drupal)" = "$(locked_version "${TESTDIR}/composer.local.lock" mglaman/phpstan-drupal)" ]
 
   # Direct conflict: overlay require incompatible with the locked version
   # triggers the pre-check error and aborts before the solver runs.
