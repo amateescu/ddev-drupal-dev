@@ -64,7 +64,7 @@ ddev commit-code-check --branch 11.x   # changes compared to a branch
 
 ## Always run tools from the project root
 
-When working on a contrib modules, run `ddev phpunit`, `ddev phpcs`, `ddev phpstan`, etc. from the Drupal project root and pass the module path, e.g. `ddev phpcs modules/contrib/dashboard`. The Drupal core tooling/config (for example `core/phpcs.xml.dist`) relative to the Drupal site root.
+When working on contrib modules, run `ddev phpunit`, `ddev phpcs`, `ddev phpstan`, etc. from the Drupal project root and pass the module path, e.g. `ddev phpcs modules/contrib/dashboard`. The appropriate Drupal core config (for example `core/phpcs.xml.dist`) is resolved relative to the Drupal site root.
 
 ## Pin core's exact dependency versions
 
