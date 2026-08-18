@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
 #ddev-generated
-## Description: Run cspell with Drupal core's configuration and dictionaries
+## Description: Run cspell with the configuration of the project being checked
 ## Usage: cspell [flags] [globs]
-## Example: "ddev cspell core/modules/node/**" or "ddev cspell" for the whole codebase
+## Example: "ddev cspell core/modules/node/**", "ddev cspell modules/contrib/token/**" or "ddev cspell" for the whole codebase
 
-core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+. /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
+
+root="${DDEV_DOCROOT:+$DDEV_DOCROOT/}"
+core="${root}core"
 
 if [ ! -x "$core/node_modules/.bin/cspell" ]; then
   echo "cspell is not installed. Install core's node dependencies first:" >&2
@@ -13,10 +16,112 @@ if [ ! -x "$core/node_modules/.bin/cspell" ]; then
   exit 1
 fi
 
-# Mirror core's spellcheck:core yarn script: run from the core directory with
-# the project root as the cspell root, so globs are project-root-relative.
-cd "$core"
-if [ "$#" -eq 0 ]; then
-  set -- "core/**/*" "composer/**/*" "composer.json" ".gitlab-ci/*" ".gitlab-ci.yml"
+# The project root is the cspell root, so globs are project-root-relative, the
+# same base the other code quality commands take their paths from.
+cspell=("$core/node_modules/.bin/cspell" --root .)
+
+# Core's check is the big one, so it keeps a cache. The cache belongs to core's
+# own configuration, so runs with any other configuration go without.
+core_cache=(--cache --cache-location "$core/.cspellcache")
+
+# Echoes the configuration that covers a path and the project the path belongs
+# to, as one key. Projects that fall back to core's configuration still need
+# telling apart, because each brings its own words.
+cspell_project() {
+  local config project
+  config=$(config_for "$1" .cspell.json cspell.json .cSpell.json cspell.config.js cspell.config.cjs cspell.config.json cspell.config.yaml cspell.config.yml cspell.yaml cspell.yml)
+  project=$(config_for "$1" .gitlab-ci.yml)
+  echo "${config:-$core/.cspell.json}|$(dirname "${project:-.}")"
+}
+
+# Echoes a variable from a project's .gitlab-ci.yml as a comma-separated list,
+# or nothing when it is unset. Takes the plain string form, a list, and the
+# "value:" form that GitLab also accepts.
+ci_variable() {
+  yq "[explode(.) | .variables.$2 // \"\"] | flatten | .[] | (.value // .)" "$1" 2>/dev/null | paste -sd, -
+}
+
+# Echoes a configuration that adds what a project declares outside its cspell
+# configuration, layered on top of the configuration given. Contrib CI reads the
+# same variables from .gitlab-ci.yml: _CSPELL_WORDS, _CSPELL_IGNORE_PATHS and
+# the project dictionary file named by _CSPELL_DICTIONARY. Echoes nothing when
+# the project declares none of them.
+words_config() {
+  local config="$1" project="$2" ci words ignore dictionary file
+  ci="$project/.gitlab-ci.yml"
+  [ -f "$ci" ] || return
+
+  # CI drops the spaces and the quotes around each word, but leaves the
+  # apostrophes inside words alone. The commas put around the list let the first
+  # and the last word lose their quotes the same way the ones between them do.
+  words=$(ci_variable "$ci" _CSPELL_WORDS | tr -d '" ')
+  [ -z "$words" ] || words=$(printf ',%s,' "$words" | sed -e "s/,'/,/g" -e "s/',/,/g")
+  ignore=$(ci_variable "$ci" _CSPELL_IGNORE_PATHS | tr -d "\"' ")
+  dictionary=$(ci_variable "$ci" _CSPELL_DICTIONARY)
+  dictionary="$project/${dictionary:-.cspell-project-words.txt}"
+  [ -f "$dictionary" ] && dictionary=$(realpath "$dictionary") || dictionary=""
+  [ -n "$words$ignore$dictionary" ] || return
+
+  file=$(mktemp -t cspell-XXXXXX.json)
+  jq -n --arg config "$(realpath "$config")" --arg project "$(realpath "$project")" \
+    --arg words "$words" --arg ignore "$ignore" --arg dictionary "$dictionary" \
+    '{
+       import: [$config],
+       globRoot: $project,
+       words: ($words | split(",") | map(select(length > 0))),
+       ignorePaths: ($ignore | split(",") | map(select(length > 0)))
+     }
+     + if $dictionary == "" then {}
+       else {dictionaryDefinitions: [{name: "project-words", path: $dictionary}], dictionaries: ["project-words"]}
+       end' > "$file"
+  echo "$file"
+}
+
+split_args "-c|-e|-r|--cache-location|--cache-strategy|--config|--dictionary|--disable-dictionary|--exclude|--file-list|--gitignore-root|--issue-template|--language-id|--locale|--report|--reporter|--root|--stop-config-search-at" "$@"
+
+# A run without globs checks core, over the same globs core checks in CI. A file
+# list names the files itself, so it gets no globs added.
+if [ "${#PATHS[@]}" -eq 0 ]; then
+  globs=("$core/**/*" "${root}composer/**/*" "${root}composer.json" "${root}.gitlab-ci/*" "${root}.gitlab-ci.yml")
+  [ "$OPERANDS" -eq 0 ] || globs=()
+  case " ${FLAGS[*]} " in *" --file-list"*) globs=() ;; esac
+  exec "${cspell[@]}" -c "$core/.cspell.json" "${core_cache[@]}" "$@" "${globs[@]}"
 fi
-exec node_modules/.bin/cspell -c .cspell.json --root .. --cache --cache-location core/.cspellcache "$@"
+
+generated=()
+trap 'rm -f "${generated[@]}"' EXIT
+
+# The globs can belong to several projects, so check each project in turn and
+# fail if any of the checks does.
+group_paths cspell_project
+status=0
+for key in "${CONFIGS[@]}"; do
+  config="${key%%|*}"
+  project="${key#*|}"
+
+  cache=()
+  overlay=$(words_config "$config" "$project")
+  if [ -n "$overlay" ]; then
+    generated+=("$overlay")
+    run_config="$overlay"
+    added=", plus the words it declares"
+  else
+    run_config="$config"
+    added=""
+    [ "$config" = "$core/.cspell.json" ] && cache=("${core_cache[@]}")
+  fi
+
+  # One project, so hand the arguments over the way they came in. Otherwise name
+  # the project too, because several of them can share core's configuration.
+  if [ "${#CONFIGS[@]}" -eq 1 ]; then
+    args=("$@")
+  else
+    [ "$project" = "." ] && echo "Checking with $config" || echo "Checking $project with $config$added"
+    mapfile -t group < <(paths_of "$key")
+    args=("${FLAGS[@]}" "${group[@]}")
+  fi
+
+  "${cspell[@]}" -c "$run_config" "${cache[@]}" "${args[@]}" || status=$?
+done
+
+exit $status

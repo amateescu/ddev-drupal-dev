@@ -1,8 +1,48 @@
 #!/usr/bin/env bash
 
 #ddev-generated
-## Description: Run PHP CodeSniffer with Drupal core's coding standard
+## Description: Run PHP CodeSniffer with the coding standard of the project being checked
 ## Usage: phpcs [flags] [paths]
-## Example: "ddev phpcs core/modules/node" or "ddev phpcs" for the whole codebase
+## Example: "ddev phpcs core/modules/node", "ddev phpcs modules/contrib/token" or "ddev phpcs" for the whole codebase
 
-exec vendor/bin/phpcs -ps --parallel="$(nproc)" --standard="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core/phpcs.xml.dist" "$@"
+. /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
+
+core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+
+phpcs=(vendor/bin/phpcs -ps --parallel="$(nproc)")
+
+phpcs_config() {
+  local config
+  # The same file names in the same order PHP CodeSniffer looks for itself.
+  config=$(config_for "$1" .phpcs.xml phpcs.xml .phpcs.xml.dist phpcs.xml.dist)
+
+  # Core's standard is the fallback for paths that belong to no project with a
+  # standard of its own.
+  echo "${config:-$core/phpcs.xml.dist}"
+}
+
+# PHP CodeSniffer options carry their value after an "=", apart from -d.
+split_args "-d" "$@"
+
+# A run without paths is the whole codebase, which core's standard already lists
+# the files for.
+if [ "${#PATHS[@]}" -eq 0 ]; then
+  exec "${phpcs[@]}" --standard="$core/phpcs.xml.dist" "$@"
+fi
+
+# The paths can belong to several projects, so run each standard in turn and
+# fail if any of the runs does.
+group_paths phpcs_config
+status=0
+for config in "${CONFIGS[@]}"; do
+  # One project, so hand the arguments over the way they came in.
+  if [ "${#CONFIGS[@]}" -eq 1 ]; then
+    exec "${phpcs[@]}" --standard="$config" "$@"
+  fi
+
+  echo "Checking with $config"
+  mapfile -t group < <(paths_of "$config")
+  "${phpcs[@]}" --standard="$config" "${FLAGS[@]}" "${group[@]}" || status=$?
+done
+
+exit $status

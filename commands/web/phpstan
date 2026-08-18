@@ -1,25 +1,56 @@
 #!/usr/bin/env bash
 
 #ddev-generated
-## Description: Run PHPStan with Drupal core's configuration
+## Description: Run PHPStan with the configuration of the project being analysed
 ## Usage: phpstan [flags] [paths]
-## Example: "ddev phpstan core/modules/node" or "ddev phpstan" for the full analysis
+## Example: "ddev phpstan core/modules/node", "ddev phpstan modules/contrib/token" or "ddev phpstan" for the full analysis
+
+. /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
 core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
-
-# Use core's partial configuration when specific paths are given. The full
-# configuration's baseline only applies cleanly to whole-codebase runs.
-config="$core/phpstan.neon.dist"
-for arg in "$@"; do
-  case "$arg" in
-    -*) ;;
-    *) config="$core/phpstan-partial.neon"; break ;;
-  esac
-done
 
 # PHPStan reads config.platform from the composer file that $COMPOSER points at,
 # which is the overlay. Point it at core's composer.json so it analyses against
 # the PHP version core declares instead of the container's runtime version.
 export COMPOSER=composer.json
 
-exec php -d apc.enabled=0 -d apc.enable_cli=0 vendor/bin/phpstan analyze --configuration="$config" "$@"
+phpstan=(php -d apc.enabled=0 -d apc.enable_cli=0 vendor/bin/phpstan analyze)
+
+phpstan_config() {
+  local config
+  config=$(config_for "$1" phpstan.neon phpstan.neon.dist phpstan.dist.neon)
+
+  # Core's configuration covers more than the core directory and its baseline
+  # only applies cleanly to whole-codebase runs, so use the partial one core
+  # ships for exactly this. It is also the fallback for paths that belong to no
+  # project with a configuration of its own.
+  if [ -z "$config" ] || [ "$config" = "$core/phpstan.neon.dist" ]; then
+    config="$core/phpstan-partial.neon"
+  fi
+  echo "$config"
+}
+
+split_args "-a|-b|-c|-l|--autoload-file|--configuration|--error-format|--generate-baseline|--instead-of|--level|--memory-limit|--tmp-file" "$@"
+
+# A run without paths is the whole codebase, which is what core's full
+# configuration and its baseline are for.
+if [ "${#PATHS[@]}" -eq 0 ]; then
+  exec "${phpstan[@]}" --configuration="$core/phpstan.neon.dist" "$@"
+fi
+
+# The paths can belong to several projects, so run each configuration in turn
+# and fail if any of the runs does.
+group_paths phpstan_config
+status=0
+for config in "${CONFIGS[@]}"; do
+  # One project, so hand the arguments over the way they came in.
+  if [ "${#CONFIGS[@]}" -eq 1 ]; then
+    exec "${phpstan[@]}" --configuration="$config" "$@"
+  fi
+
+  echo "Analysing with $config"
+  mapfile -t group < <(paths_of "$config")
+  "${phpstan[@]}" --configuration="$config" "${FLAGS[@]}" "${group[@]}" || status=$?
+done
+
+exit $status
