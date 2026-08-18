@@ -150,6 +150,74 @@ teardown() {
   assert_success
   health_checks
 
+  # A project with no configuration of its own is checked with core's, which
+  # reports the missing return type and the missing class doc comment through
+  # core's own rules.
+  mkdir -p "${TESTDIR}/modules/custom/stantest/src"
+  cat > "${TESTDIR}/modules/custom/stantest/src/Example.php" <<'EOF'
+<?php
+
+namespace Drupal\stantest;
+
+class Example {
+
+  public function value() {
+    return 1;
+  }
+
+}
+EOF
+  run ddev phpstan modules/custom/stantest
+  assert_failure
+  assert_output --partial "no return type specified"
+  run ddev phpcs modules/custom/stantest
+  assert_failure
+  assert_output --partial "Missing class doc comment"
+
+  # A project with its own configuration is checked with it, from any path
+  # inside the project.
+  printf 'parameters:\n  level: 0\n' > "${TESTDIR}/modules/custom/stantest/phpstan.neon"
+  printf '<ruleset name="stantest"><rule ref="Generic.PHP.LowerCaseKeyword"/></ruleset>\n' > "${TESTDIR}/modules/custom/stantest/phpcs.xml"
+  run ddev phpstan modules/custom/stantest
+  assert_success
+  run ddev phpstan modules/custom/stantest/src/Example.php
+  assert_success
+  run ddev phpcs modules/custom/stantest
+  assert_success
+  run ddev phpcs modules/custom/stantest/src/Example.php
+  assert_success
+
+  # An option value that comes as a separate argument is not taken for a path,
+  # and a path spelled differently still lands in the same group. Both would
+  # split a single project's run in two, which prints one header per group.
+  run ddev phpstan --level 0 modules/custom/stantest
+  assert_success
+  refute_output --partial "Analysing with"
+  run ddev phpstan ./core/lib/Drupal/Core/Entity/EntityInterface.php core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  refute_output --partial "Analysing with"
+  run ddev phpcs -d memory_limit=256M modules/custom/stantest
+  assert_success
+  refute_output --partial "Checking with"
+
+  # Paths from several projects are checked one project at a time.
+  run ddev phpstan modules/custom/stantest core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "modules/custom/stantest/phpstan.neon"
+  assert_output --partial "core/phpstan-partial.neon"
+  run ddev phpcs modules/custom/stantest core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "modules/custom/stantest/phpcs.xml"
+  assert_output --partial "core/phpcs.xml.dist"
+
+  # A failing project in a run of several does not go unnoticed.
+  mkdir -p "${TESTDIR}/modules/custom/badtest"
+  printf '<?php\n\nclass Bad {}\n' > "${TESTDIR}/modules/custom/badtest/Bad.php"
+  run ddev phpcs modules/custom/stantest modules/custom/badtest
+  assert_failure
+  assert_output --partial "Missing class doc comment"
+  rm -rf "${TESTDIR}/modules/custom"
+
   # --db flag: SQLite works
   run ddev phpunit --db=sqlite core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success

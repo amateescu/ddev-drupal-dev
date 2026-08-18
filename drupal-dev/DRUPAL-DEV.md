@@ -47,12 +47,15 @@ ddev phpunit modules/contrib/token              # contrib module tests
 
 ```bash
 ddev phpstan core/modules/node         # PHPStan on specific paths
+ddev phpstan modules/contrib/token     # a contrib project, with its own configuration
 ddev phpcs core/modules/node           # coding standard checks
 ddev cspell core/modules/node/**       # spell checking (globs)
 ```
 
-Run any of them without arguments to check the whole codebase. `ddev cspell`
-needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
+Each command uses the configuration of the project being checked, and core's for
+anything that has none. Run any of them without arguments to check the whole
+codebase. `ddev cspell` needs core's node dependencies:
+`ddev exec 'corepack enable && cd core && yarn install'`.
 
 Core's pre-commit script, on your changed files only:
 
