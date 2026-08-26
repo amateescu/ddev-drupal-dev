@@ -40,8 +40,8 @@ usage() {
 
 cd "$DDEV_APPROOT"
 
-# The project at the root is whatever its remotes say it is, so this works for a
-# distribution checkout as much as for core.
+# The project at the root is read from its remotes, so this works for a
+# distribution checkout as well as for core.
 ROOT_PATH=$(drupalcode_project_path .) || ROOT_PATH=""
 
 PROJECT=""
@@ -50,8 +50,8 @@ PROJECT=""
 if [ $# -eq 1 ] && [[ "$1" =~ ^https?://[^/]+/(.+)/-/merge_requests/([0-9]+) ]]; then
   GITLAB_PATH="${BASH_REMATCH[1]}"
   NUMBER="${BASH_REMATCH[2]}"
-# So does a drupal.org issue page, which is the URL you have in hand while
-# reading the issue.
+# So does a drupal.org issue page, which is the URL you have when reading the
+# issue.
 elif [ $# -eq 1 ] && [[ "$1" =~ ^https?://(www\.)?drupal\.org/project/([a-z0-9_]+)/issues/([0-9]+) ]]; then
   GITLAB_PATH="project/${BASH_REMATCH[2]}"
   NUMBER="${BASH_REMATCH[3]}"
@@ -77,8 +77,8 @@ else
   exit 1
 fi
 
-# A URL carries the project rather than naming it the way an argument does, so
-# work out from it whether the checkout at the root is the one meant.
+# A URL gives the project as a path instead of a name, so work out from it
+# whether the checkout at the root is the one meant.
 if [ -z "$PROJECT" ]; then
   if [ "$GITLAB_PATH" = "$ROOT_PATH" ]; then
     PROJECT="core"
@@ -97,7 +97,7 @@ ENCODED="${GITLAB_PATH//\//%2F}"
 MR_FIELDS='[.iid, .source_branch, .target_branch, .source_project_id, .state, .title] | @tsv'
 
 # Try the number as a merge request first. Issue numbers are much larger these
-# days, but only asking tells the two apart for certain.
+# days, but the only reliable way to tell them apart is to try.
 MR=$(drupalcode_api "projects/$ENCODED/merge_requests/$NUMBER" "$MR_FIELDS")
 
 if [ -z "$MR" ]; then
@@ -106,9 +106,9 @@ if [ -z "$MR" ]; then
   echo "No merge request $NUMBER in $GITLAB_PATH, looking for issue $NUMBER..."
   FORK_ID=$(drupalcode_api "projects/issue%2F${GITLAB_PATH#project/}-$NUMBER" '.id')
   if [ -z "$FORK_ID" ]; then
-    # An empty answer means the request failed, which covers a project that is
-    # not there as much as a site that cannot be reached. Ask for the project
-    # itself to tell those apart from a number that is simply wrong.
+    # An empty answer means the request failed, which could be a missing project
+    # or an unreachable site. Ask for the project itself to tell those apart from
+    # a number that is simply wrong.
     if [ -z "$(drupalcode_api "projects/$ENCODED" '.id')" ]; then
       echo "Error: could not read $GITLAB_PATH from git.drupalcode.org. Either no"
       echo "project goes by that name, or the site is unreachable from here."
@@ -119,7 +119,7 @@ if [ -z "$MR" ]; then
     exit 1
   fi
 
-  # Newest first, so an issue that was reworked lands on its current branch.
+  # Newest first, so an issue that was reworked gets its current branch.
   CANDIDATES=$(drupalcode_api \
     "projects/$ENCODED/merge_requests?source_project_id=$FORK_ID&state=all" \
     ".[] | $MR_FIELDS")
@@ -161,7 +161,7 @@ else
   REMOTE_URL="$FORK_SSH"
 fi
 
-# Work out where the checkout lives.
+# Work out where the checkout is.
 if [ "$PROJECT" = "core" ]; then
   DIR="."
 else
@@ -174,9 +174,9 @@ if ! is_git_checkout "$DIR"; then
   exit 1
 fi
 
-# A fork carries a copy of every branch of the project it came from, and those
+# A fork has a copy of every branch of the project it was forked from, and those
 # copies are what make branch names ambiguous for 'ddev switch'. Tracking only
-# the merge request branch keeps them out for good, including from a later
+# the merge request branch keeps them out for good, including on a later
 # 'git fetch --all'.
 REFSPEC="+refs/heads/$SOURCE_BRANCH:refs/remotes/$REMOTE/$SOURCE_BRANCH"
 WILDCARD="+refs/heads/*:refs/remotes/$REMOTE/*"
@@ -187,7 +187,7 @@ if ! git -C "$DIR" remote get-url "$REMOTE" >/dev/null 2>&1; then
 elif ! git -C "$DIR" config --get-all "remote.$REMOTE.fetch" \
   | grep -qxF -e "$REFSPEC" -e "$WILDCARD"; then
   # A remote from an earlier run tracks only the branches it fetched, so add
-  # this one to it. A remote set up by hand keeps whatever it was given.
+  # this one to it. A remote set up by hand is left as it is.
   git -C "$DIR" remote set-branches --add "$REMOTE" "$SOURCE_BRANCH"
 fi
 
@@ -222,7 +222,7 @@ fi
 # The constraint follows the branch the merge request targets, because that is
 # the release branch drupal.org publishes a dev version for. A merge request
 # branch has none, and the path repository cannot supply one either: the
-# drupal.org repository is canonical and outranks it. What lands on disk is the
+# drupal.org repository is canonical and outranks it. The code installed is the
 # checkout, which composer-git-installer keeps in place.
 COMPOSER_VERSION=$(find_composer_dev_version "$PROJECT" "$TARGET_BRANCH")
 

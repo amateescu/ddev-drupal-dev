@@ -76,8 +76,8 @@ drupalcode_api() {
 }
 
 # Echoes the drupalcode.org project path a checkout came from, like
-# "project/drupal". Reads the remote URLs, so it works for whatever project sits
-# at the root, not just core. Returns 1 when no remote points at drupalcode.
+# "project/drupal". Reads the remote URLs, so it works for whichever project
+# is at the root, not just core. Returns 1 when no remote points at drupalcode.
 drupalcode_project_path() {
   local dir="$1" remote url
   while read -r remote; do
