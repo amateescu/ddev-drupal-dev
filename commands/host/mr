@@ -93,6 +93,14 @@ if [ -z "$MR" ]; then
   echo "No merge request $NUMBER in $GITLAB_PATH, looking for issue $NUMBER..."
   FORK_ID=$(drupalcode_api "projects/issue%2F${GITLAB_PATH#project/}-$NUMBER" '.id')
   if [ -z "$FORK_ID" ]; then
+    # An empty answer means the request failed, which covers a project that is
+    # not there as much as a site that cannot be reached. Ask for the project
+    # itself to tell those apart from a number that is simply wrong.
+    if [ -z "$(drupalcode_api "projects/$ENCODED" '.id')" ]; then
+      echo "Error: could not read $GITLAB_PATH from git.drupalcode.org. Either no"
+      echo "project goes by that name, or the site is unreachable from here."
+      exit 1
+    fi
     echo "Error: $GITLAB_PATH has no merge request $NUMBER, and issue $NUMBER has"
     echo "no fork of it. Check the number on drupal.org."
     exit 1
@@ -106,7 +114,8 @@ if [ -z "$MR" ]; then
   OPEN=$(echo "$CANDIDATES" | awk -F'\t' '$5 == "opened"')
   if [ "$(echo "$OPEN" | grep -c .)" -gt 1 ]; then
     echo "Error: issue $NUMBER has more than one open merge request. Pick one:"
-    echo "$OPEN" | awk -F'\t' '{printf "  ddev mr '"$PROJECT"' %s   # %s -> %s\n", $1, $2, $3}'
+    echo "$OPEN" | awk -F'\t' -v project="$PROJECT" \
+      '{printf "  ddev mr %s %s   # %s -> %s\n", project, $1, $2, $3}'
     exit 1
   fi
 
@@ -152,17 +161,25 @@ if ! is_git_checkout "$DIR"; then
   exit 1
 fi
 
-# An existing remote is left as the user set it up, URL and all.
+# A fork carries a copy of every branch of the project it came from, and those
+# copies are what make branch names ambiguous for 'ddev switch'. Tracking only
+# the merge request branch keeps them out for good, including from a later
+# 'git fetch --all'.
+REFSPEC="+refs/heads/$SOURCE_BRANCH:refs/remotes/$REMOTE/$SOURCE_BRANCH"
+WILDCARD="+refs/heads/*:refs/remotes/$REMOTE/*"
+
 if ! git -C "$DIR" remote get-url "$REMOTE" >/dev/null 2>&1; then
   echo "Adding remote $REMOTE -> $REMOTE_URL"
-  git -C "$DIR" remote add "$REMOTE" "$REMOTE_URL"
+  git -C "$DIR" remote add -t "$SOURCE_BRANCH" "$REMOTE" "$REMOTE_URL"
+elif ! git -C "$DIR" config --get-all "remote.$REMOTE.fetch" \
+  | grep -qxF -e "$REFSPEC" -e "$WILDCARD"; then
+  # A remote from an earlier run tracks only the branches it fetched, so add
+  # this one to it. A remote set up by hand keeps whatever it was given.
+  git -C "$DIR" remote set-branches --add "$REMOTE" "$SOURCE_BRANCH"
 fi
 
-# A fork carries a copy of every branch of the project it came from. Fetching
-# only the merge request branch keeps those copies out of the way, so branch
-# names stay unambiguous for 'ddev switch'.
 echo "Fetching $SOURCE_BRANCH from $REMOTE..."
-git -C "$DIR" fetch -q "$REMOTE" "+refs/heads/$SOURCE_BRANCH:refs/remotes/$REMOTE/$SOURCE_BRANCH"
+git -C "$DIR" fetch -q "$REMOTE" "$REFSPEC"
 
 echo "Switching $PROJECT to $SOURCE_BRANCH..."
 switch_to_branch "$DIR" "${GITLAB_PATH#project/}" "$SOURCE_BRANCH"
@@ -195,6 +212,14 @@ fi
 # drupal.org repository is canonical and outranks it. What lands on disk is the
 # checkout, which composer-git-installer keeps in place.
 COMPOSER_VERSION=$(find_composer_dev_version "$PROJECT" "$TARGET_BRANCH")
+
+if [ "$COMPOSER_VERSION" = "*" ]; then
+  echo ""
+  echo "Note: drupal.org publishes no dev version for $PROJECT's $TARGET_BRANCH"
+  echo "branch, so the constraint stays open and Composer may lock a tagged"
+  echo "release. The checkout stays on the merge request branch either way."
+  echo ""
+fi
 
 echo "Updating drupal/$PROJECT to $COMPOSER_VERSION..."
 ddev composer require --no-interaction --update-with-all-dependencies "drupal/$PROJECT:$COMPOSER_VERSION"

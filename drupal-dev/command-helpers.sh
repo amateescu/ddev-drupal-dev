@@ -67,11 +67,12 @@ EOF
 # request shows up.
 #   drupalcode_api "projects/project%2Fdrupal/merge_requests/16853" '.source_branch'
 drupalcode_api() {
-  # The script goes in over stdin, which 'ddev exec --raw' does not forward, so
-  # this stays a plain exec.
-  ddev exec -- bash <<EOF
-curl -fs --max-time 20 "https://git.drupalcode.org/api/v4/$1" | jq -r '$2' 2>/dev/null
-EOF
+  # --raw passes the arguments through untouched, so the path and the filter
+  # reach the container as data. Splicing them into the command instead would
+  # run whatever a pasted URL or an API field happened to contain.
+  ddev exec --raw -- bash -c \
+    'curl -fs --max-time 20 "https://git.drupalcode.org/api/v4/$1" | jq -r "$2" 2>/dev/null' \
+    drupalcode_api "$1" "$2"
 }
 
 # Echoes the drupalcode.org project path a checkout came from, like
@@ -81,7 +82,7 @@ drupalcode_project_path() {
   local dir="$1" remote url
   while read -r remote; do
     url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) || continue
-    if [[ "$url" =~ [:/](project/[a-z0-9_]+)(\.git)?/?$ ]]; then
+    if [[ "$url" =~ git\.drupal[a-z]*\.org[:/](project/[a-z0-9_]+)(\.git)?/?$ ]]; then
       echo "${BASH_REMATCH[1]}"
       return 0
     fi

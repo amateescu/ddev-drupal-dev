@@ -32,8 +32,9 @@ ddev mr token 136                      # a contrib module's merge request
 ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
 ```
 
-Adds the issue fork as a remote, fetches just the merge request branch, checks
-it out and re-solves the overlay. `--https` for a remote you cannot push to.
+Adds the issue fork as a remote tracking only the merge request branch, checks
+it out and re-solves the overlay. The branch tracks the fork, so a plain
+`git push` updates the merge request. `--https` for a remote you cannot push to.
 
 ## Composer overlay
 
