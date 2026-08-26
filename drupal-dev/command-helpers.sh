@@ -89,17 +89,6 @@ drupalcode_project_path() {
   return 1
 }
 
-# Echoes the version Composer derives from a branch name for a path repository.
-# A release branch becomes "3.0.x-dev", anything else "dev-<branch>", which is
-# what a merge request branch ends up as.
-composer_branch_version() {
-  if [[ "$1" =~ ^v?[0-9]+(\.[0-9]+)*\.x$ ]]; then
-    echo "$1-dev"
-  else
-    echo "dev-$1"
-  fi
-}
-
 # Echoes the remotes that have a branch, one per line.
 remotes_with_branch() {
   local dir="$1" branch="$2" remote

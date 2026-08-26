@@ -109,7 +109,7 @@ ddev mr token 136       # a contrib module's merge request
 ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
 ```
 
-It reads the merge request from git.drupalcode.org, adds the issue fork as a remote if it is not there yet, fetches the branch, checks it out and updates Composer. For core that means `ddev composer update`, which is what clears the "package is in the lock file as 11.x-dev but that does not satisfy your constraint 12.x-dev" failure you get from `ddev composer install` after moving between major branches by hand. For a contrib module the constraint follows the branch, so Composer installs from the path repository.
+It reads the merge request from git.drupalcode.org, adds the issue fork as a remote if it is not there yet, fetches the branch, checks it out and updates Composer. For core that means `ddev composer update`, which is what clears the "package is in the lock file as 11.x-dev but that does not satisfy your constraint 12.x-dev" failure you get from `ddev composer install` after moving between major branches by hand. For a contrib module the constraint follows the branch the merge request targets, since that is the release branch drupal.org publishes a dev version for; the checkout on the merge request branch is what you edit and run.
 
 Only the merge request branch is fetched from the fork. A fork carries a copy of every branch of the project it came from, and it is those copies that make a later `git switch 11.x` ambiguous.
 

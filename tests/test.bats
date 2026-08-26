@@ -270,14 +270,6 @@ EOF
   run bash -c ". '${TESTDIR}/.ddev/drupal-dev/command-helpers.sh' && drupalcode_project_path '${TESTDIR}'"
   assert_success
   assert_output "project/drupal"
-
-  # The version Composer derives from a branch, which is what a merge request
-  # branch is required as. Release branches keep the "-dev" suffix form.
-  run bash -c ". '${TESTDIR}/.ddev/drupal-dev/command-helpers.sh' && composer_branch_version 8.x-1.x && composer_branch_version 3.0.x && composer_branch_version 3609143-do-not-load"
-  assert_success
-  assert_line --index 0 "dev-8.x-1.x"
-  assert_line --index 1 "3.0.x-dev"
-  assert_line --index 2 "dev-3609143-do-not-load"
 }
 
 # bats test_tags=release
@@ -329,8 +321,14 @@ EOF
   assert_output --partial "3609143-do-not-load -> 8.x-1.x"
   run git -C "${TESTDIR}/modules/contrib/token" symbolic-ref --short HEAD
   assert_output "3609143-do-not-load"
+  # The constraint tracks the branch the merge request targets, because that is
+  # the one drupal.org publishes a dev version for. Requiring the merge request
+  # branch itself cannot resolve: the drupal.org repository is canonical and
+  # outranks the path repository.
   run grep -o '"drupal/token": "[^"]*"' "${TESTDIR}/composer.local.json"
-  assert_output --partial "dev-3609143-do-not-load"
+  assert_output --partial "1.x-dev"
+  run ddev composer show drupal/token
+  assert_success
 
   # Only the merge request branch is fetched from the fork. A fork carries a
   # copy of every branch, and those copies would make 'ddev switch' ambiguous.

@@ -189,9 +189,12 @@ if [ "$PROJECT" = "core" ]; then
   exit 0
 fi
 
-# A merge request branch is no release branch, so the version comes from the
-# path repository rather than from what drupal.org publishes.
-COMPOSER_VERSION=$(composer_branch_version "$SOURCE_BRANCH")
+# The constraint follows the branch the merge request targets, because that is
+# the release branch drupal.org publishes a dev version for. A merge request
+# branch has none, and the path repository cannot supply one either: the
+# drupal.org repository is canonical and outranks it. What lands on disk is the
+# checkout, which composer-git-installer keeps in place.
+COMPOSER_VERSION=$(find_composer_dev_version "$PROJECT" "$TARGET_BRANCH")
 
 echo "Updating drupal/$PROJECT to $COMPOSER_VERSION..."
 ddev composer require --no-interaction --update-with-all-dependencies "drupal/$PROJECT:$COMPOSER_VERSION"
