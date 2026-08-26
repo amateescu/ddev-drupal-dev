@@ -21,7 +21,7 @@ done
 
 usage() {
   echo "Usage: ddev mr [--https] <project> <merge request or issue number>"
-  echo "       ddev mr [--https] <merge request url>"
+  echo "       ddev mr [--https] <merge request or drupal.org issue url>"
   echo ""
   echo "Adds the issue fork as a remote, checks out the merge request branch"
   echo "and updates Composer to match. Use 'core' for the checkout at the"
@@ -35,6 +35,7 @@ usage() {
   echo "  ddev mr core 3563677    # an issue number, resolved to its merge request"
   echo "  ddev mr token 136       # a contrib module's merge request"
   echo "  ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853"
+  echo "  ddev mr https://www.drupal.org/project/drupal/issues/3563677"
 }
 
 cd "$DDEV_APPROOT"
@@ -43,15 +44,17 @@ cd "$DDEV_APPROOT"
 # distribution checkout as much as for core.
 ROOT_PATH=$(drupalcode_project_path .) || ROOT_PATH=""
 
+PROJECT=""
+
 # A merge request URL names the project and the number by itself.
 if [ $# -eq 1 ] && [[ "$1" =~ ^https?://[^/]+/(.+)/-/merge_requests/([0-9]+) ]]; then
   GITLAB_PATH="${BASH_REMATCH[1]}"
   NUMBER="${BASH_REMATCH[2]}"
-  if [ "$GITLAB_PATH" = "$ROOT_PATH" ]; then
-    PROJECT="core"
-  else
-    PROJECT="${GITLAB_PATH#project/}"
-  fi
+# So does a drupal.org issue page, which is the URL you have in hand while
+# reading the issue.
+elif [ $# -eq 1 ] && [[ "$1" =~ ^https?://(www\.)?drupal\.org/project/([a-z0-9_]+)/issues/([0-9]+) ]]; then
+  GITLAB_PATH="project/${BASH_REMATCH[2]}"
+  NUMBER="${BASH_REMATCH[3]}"
 elif [ $# -eq 2 ]; then
   PROJECT="$1"
   NUMBER="$2"
@@ -72,6 +75,16 @@ elif [ $# -eq 2 ]; then
 else
   usage
   exit 1
+fi
+
+# A URL carries the project rather than naming it the way an argument does, so
+# work out from it whether the checkout at the root is the one meant.
+if [ -z "$PROJECT" ]; then
+  if [ "$GITLAB_PATH" = "$ROOT_PATH" ]; then
+    PROJECT="core"
+  else
+    PROJECT="${GITLAB_PATH#project/}"
+  fi
 fi
 
 if [[ ! "$NUMBER" =~ ^[0-9]+$ ]]; then

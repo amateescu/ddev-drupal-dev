@@ -344,6 +344,10 @@ EOF
   run ddev mr --https https://git.drupalcode.org/project/token/-/merge_requests/133
   assert_success
   assert_output --partial "Merge request !133"
+  git -C "${TESTDIR}/modules/contrib/token" switch -q 8.x-1.x
+  run ddev mr --https https://www.drupal.org/project/token/issues/3609143
+  assert_success
+  assert_output --partial "Merge request !133"
 
   # mr: a number that is neither a merge request nor an issue
   run ddev mr token 99999999

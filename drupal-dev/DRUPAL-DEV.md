@@ -30,6 +30,7 @@ ddev mr core 16853                     # a merge request number
 ddev mr core 3563677                   # an issue number, resolved to its merge request
 ddev mr token 136                      # a contrib module's merge request
 ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
+ddev mr https://www.drupal.org/project/drupal/issues/3563677
 ```
 
 Adds the issue fork as a remote tracking only the merge request branch, checks
