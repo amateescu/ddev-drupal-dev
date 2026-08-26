@@ -98,6 +98,24 @@ This runs `git switch`, syncs the container, and runs `ddev composer update`. Th
 
 Branches that don't exist locally yet are created from the canonical drupal.org repository. Issue fork remotes carry the same branch names, so a plain `git switch 11.x` fails with "matched multiple remote tracking branches" once you have a few forks fetched; `ddev switch` picks the project repository instead. This works the same way for contrib modules.
 
+## Merge requests
+
+Checking out someone's merge request by hand means finding the issue fork, adding it as a remote, fetching, checking out the branch and re-solving the overlay. `ddev mr` does all of it:
+
+```bash
+ddev mr core 16853      # a merge request number
+ddev mr core 3563677    # an issue number, resolved to its merge request
+ddev mr token 136       # a contrib module's merge request
+ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
+ddev mr https://www.drupal.org/project/drupal/issues/3563677    # or the issue page
+```
+
+For core it ends in `ddev composer update`, which is what clears the "package is in the lock file as 11.x-dev but that does not satisfy your constraint 12.x-dev" failure you get from `ddev composer install` after switching between major branches by hand. For a contrib module the constraint follows the branch the merge request targets.
+
+The branch tracks the fork, so a plain `git push` updates the merge request. Pass `--https` for a remote you cannot push to.
+
+`core` means whichever project is at the root, read from its remotes, so a distribution checkout works too. The fork remote is set up to track only the merge request branch, so a fork's copies of `11.x` and `main` stay out of your branch list.
+
 ## Reproducing core's exact dependency versions
 
 When reproducing a core bug or validating a patch, you sometimes need the same resolved dependency versions as core's `composer.lock`. By default the overlay's solver runs fresh, so shared packages (Symfony, Guzzle, etc.) may resolve to newer versions than core recorded.
@@ -212,6 +230,7 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | `ddev commit-code-check [flags]` | Run core's pre-commit checks on your changed files |
 | `ddev add-module <name>` | Clone a contrib module for development |
 | `ddev switch <project> <branch>` | Switch core or a module to a branch and update dependencies |
+| `ddev mr <project> <number>` | Check out a merge request branch and update dependencies |
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |
 | `ddev remove-module <name>` | Remove a previously cloned contrib module |
 

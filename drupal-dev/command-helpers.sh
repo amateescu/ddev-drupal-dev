@@ -61,6 +61,35 @@ EOF
   echo "${version:-*}"
 }
 
+# Echoes the result of a git.drupalcode.org API request, passed through a jq
+# filter. Runs in the container, so the host needs neither curl nor jq. Echoes
+# nothing when the request fails, which is how a missing project or merge
+# request shows up.
+#   drupalcode_api "projects/project%2Fdrupal/merge_requests/16853" '.source_branch'
+drupalcode_api() {
+  # --raw passes the arguments through untouched, so the path and the filter
+  # reach the container as data. Splicing them into the command instead would
+  # run whatever a pasted URL or an API field happened to contain.
+  ddev exec --raw -- bash -c \
+    'curl -fs --max-time 20 "https://git.drupalcode.org/api/v4/$1" | jq -r "$2" 2>/dev/null' \
+    drupalcode_api "$1" "$2"
+}
+
+# Echoes the drupalcode.org project path a checkout came from, like
+# "project/drupal". Reads the remote URLs, so it works for whichever project
+# is at the root, not just core. Returns 1 when no remote points at drupalcode.
+drupalcode_project_path() {
+  local dir="$1" remote url
+  while read -r remote; do
+    url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) || continue
+    if [[ "$url" =~ git\.drupal[a-z]*\.org[:/](project/[a-z0-9_]+)(\.git)?/?$ ]]; then
+      echo "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done < <(git -C "$dir" remote 2>/dev/null)
+  return 1
+}
+
 # Echoes the remotes that have a branch, one per line.
 remotes_with_branch() {
   local dir="$1" branch="$2" remote
