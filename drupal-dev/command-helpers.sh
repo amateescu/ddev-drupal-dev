@@ -22,6 +22,8 @@ is_git_checkout() {
 # config. Falls back to modules/contrib/<name>.
 get_module_dir() {
   local module="$1" dir
+  # The script goes in over stdin, which 'ddev exec --raw' does not forward, so
+  # this stays a plain exec.
   dir=$(ddev exec -- bash <<'EOF' | sed "s/{\\\$name}/$module/"
 composer config extra.installer-paths --json 2>/dev/null \
   | jq -r 'to_entries[] | select(.value[] == "type:drupal-module") | .key' 2>/dev/null

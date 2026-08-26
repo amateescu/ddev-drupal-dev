@@ -2,6 +2,37 @@
 # Shared functions for the drupal-dev container commands. Sourced with:
 #   . /mnt/ddev_config/drupal-dev/web-command-helpers.sh
 
+# Rewrites the arguments in ARGS with each glob replaced by the paths it matches.
+# Tools that take paths rather than globs need this, because a quoted glob
+# reaches the command whole instead of being expanded by a shell on the way in.
+# A glob that matches nothing is left alone, so the tool reports it rather than
+# the run quietly widening to the whole codebase.
+#   expand_globs "$@"; set -- "${ARGS[@]}"
+expand_globs() {
+  local arg restore
+  local -a matched
+  # Empty IFS keeps a pattern with a space in it in one piece; pathname
+  # expansion still hands back one match per element. globstar makes "**" cross
+  # directories the way people write it.
+  local IFS=
+  restore=$(shopt -p globstar)
+  shopt -s globstar
+
+  ARGS=()
+  for arg in "$@"; do
+    case "$arg" in
+      -*) ARGS+=("$arg") ;;
+      *[*?[]*)
+        matched=($arg)
+        ARGS+=("${matched[@]}")
+        ;;
+      *) ARGS+=("$arg") ;;
+    esac
+  done
+
+  eval "$restore"
+}
+
 # Splits arguments into the FLAGS and PATHS arrays, and counts in OPERANDS the
 # arguments that are neither an option nor the value of one. The first argument
 # lists the options that take a separate value, so the value stays with its flag

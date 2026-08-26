@@ -4,6 +4,10 @@
 ## Description: Run PHPStan with the configuration of the project being analysed
 ## Usage: phpstan [flags] [paths]
 ## Example: "ddev phpstan core/modules/node", "ddev phpstan modules/contrib/token" or "ddev phpstan" for the full analysis
+## ExecRaw: true
+
+# ExecRaw keeps the arguments as they came in; without it ddev joins them and a
+# shell in the container splits them again, turning a path with a space into two.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
@@ -29,6 +33,11 @@ phpstan_config() {
   fi
   echo "$config"
 }
+
+# PHPStan takes paths, not globs, so expand any glob that came in whole
+# before working out which project the paths belong to.
+expand_globs "$@"
+set -- "${ARGS[@]}"
 
 split_args "-a|-b|-c|-l|--autoload-file|--configuration|--error-format|--generate-baseline|--instead-of|--level|--memory-limit|--tmp-file" "$@"
 

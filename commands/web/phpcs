@@ -4,6 +4,10 @@
 ## Description: Run PHP CodeSniffer with the coding standard of the project being checked
 ## Usage: phpcs [flags] [paths]
 ## Example: "ddev phpcs core/modules/node", "ddev phpcs modules/contrib/token" or "ddev phpcs" for the whole codebase
+## ExecRaw: true
+
+# ExecRaw keeps the arguments as they came in; without it ddev joins them and a
+# shell in the container splits them again, turning a path with a space into two.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
@@ -20,6 +24,11 @@ phpcs_config() {
   # standard of its own.
   echo "${config:-$core/phpcs.xml.dist}"
 }
+
+# PHP CodeSniffer takes paths, not globs, so expand any glob that came in
+# whole before working out which project the paths belong to.
+expand_globs "$@"
+set -- "${ARGS[@]}"
 
 # PHP CodeSniffer options carry their value after an "=", apart from -d.
 split_args "-d" "$@"

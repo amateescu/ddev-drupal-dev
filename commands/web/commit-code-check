@@ -4,6 +4,10 @@
 ## Description: Run Drupal core's commit-code-check script on your changes
 ## Usage: commit-code-check [flags]
 ## Example: "ddev commit-code-check --cached" for staged files or "ddev commit-code-check" for all working directory changes
+## ExecRaw: true
+
+# ExecRaw keeps the arguments as they came in; without it ddev joins them and a
+# shell in the container splits them again, turning a path with a space into two.
 
 # The script runs PHPStan, which reads config.platform from the composer file
 # that $COMPOSER points at. Point it at core's composer.json so the analysis
