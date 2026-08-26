@@ -4,6 +4,10 @@
 ## Description: Run cspell with the configuration of the project being checked
 ## Usage: cspell [flags] [globs]
 ## Example: "ddev cspell core/modules/node/**", "ddev cspell modules/contrib/token/**" or "ddev cspell" for the whole codebase
+## ExecRaw: true
+
+# ExecRaw keeps the arguments as they came in; without it ddev joins them and a
+# shell in the container splits them again, turning a path with a space into two.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 

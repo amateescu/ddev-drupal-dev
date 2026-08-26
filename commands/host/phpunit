@@ -23,7 +23,7 @@ if [ -n "$DB" ]; then
     pgsql)
       if [ "$DDEV_DATABASE_FAMILY" = "postgres" ]; then
         SIMPLETEST_DB="pgsql://db:db@db/db"
-      elif ddev exec -- php -r "new PDO('pgsql:host=postgres;dbname=db', 'db', 'db');" 2>/dev/null; then
+      elif ddev exec --raw -- php -r "new PDO('pgsql:host=postgres;dbname=db', 'db', 'db');" 2>/dev/null; then
         SIMPLETEST_DB="pgsql://db:db@postgres/db"
       else
         echo "Error: PostgreSQL is not available. Configure your project with"
@@ -39,7 +39,8 @@ if [ -n "$DB" ]; then
   echo "Using database: $DB"
 fi
 
-# Clear stale webdriver sessions if Chrome is running.
+# Clear stale webdriver sessions if Chrome is running. The script goes in over
+# stdin, which 'ddev exec --raw' does not forward, so this stays a plain exec.
 ddev exec -- bash >/dev/null 2>&1 << 'SCRIPT' || true
   [ -z "${DRUPAL_TEST_WEBDRIVER_HOSTNAME:-}" ] && exit 0
   base_url="http://${DRUPAL_TEST_WEBDRIVER_HOSTNAME}:${DRUPAL_TEST_WEBDRIVER_PORT}"
@@ -54,4 +55,8 @@ SCRIPT
 # default applies.
 cmd=(phpunit -c "${DDEV_DOCROOT:+$DDEV_DOCROOT/}core" "${args[@]}")
 [ -n "$DB" ] && cmd=(env "SIMPLETEST_DB=$SIMPLETEST_DB" "${cmd[@]}")
-ddev exec -- "${cmd[@]}"
+# --raw runs the command directly. Without it ddev joins the arguments with
+# spaces and runs the result through a shell in the container, which splits
+# them again and treats metacharacters as syntax: --filter 'testFoo|testBar'
+# turns into a pipe.
+ddev exec --raw -- "${cmd[@]}"

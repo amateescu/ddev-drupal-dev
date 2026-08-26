@@ -109,16 +109,18 @@ ddev composer require --no-interaction --update-with-all-dependencies "drupal/$M
 
 # Remove the #ddev-generated marker from composer files since
 # they now contain user-specific configuration. Run inside the container
-# since those files were just written there by composer.
-ddev exec -- sed -i '/"_comment": "#ddev-generated"/d' composer.local.json 2>/dev/null || true
-ddev exec -- sed -i '/#ddev-generated/d' composer.local.lock 2>/dev/null || true
+# since those files were just written there by composer. --raw hands sed its
+# script as one argument; without it the container shell splits it on spaces
+# and takes the '#' for a comment.
+ddev exec --raw -- sed -i '/"_comment": "#ddev-generated"/d' composer.local.json
+ddev exec --raw -- sed -i '/#ddev-generated/d' composer.local.lock
 
 echo ""
 printf '\033[32m  Done! drupal/%s is ready for development in %s\033[0m\n' "$MODULE_NAME" "$MODULE_DIR"
 
 # Show require-dev dependencies with suggestions for how to install them.
 if [ -f "$MODULE_DIR/composer.json" ]; then
-  DEV_DEPS=$(ddev exec -- jq -r '."require-dev" // {} | to_entries[] | "\(.key) \(.value)"' "$MODULE_DIR/composer.json")
+  DEV_DEPS=$(ddev exec --raw -- jq -r '."require-dev" // {} | to_entries[] | "\(.key) \(.value)"' "$MODULE_DIR/composer.json")
   if [ -n "$DEV_DEPS" ]; then
     printf '\n'
     printf '  \033[1mDev dependencies (not installed):\033[0m\n'

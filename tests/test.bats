@@ -174,6 +174,15 @@ EOF
   assert_failure
   assert_output --partial "Missing class doc comment"
 
+  # A quoted glob reaches the command whole, so it is expanded before the tools
+  # see it: they take paths, not globs. '**' crosses directories.
+  run ddev phpcs 'modules/custom/stantest/src/*.php'
+  assert_failure
+  assert_output --partial "Missing class doc comment"
+  run ddev phpstan 'modules/custom/**/*.php'
+  assert_failure
+  assert_output --partial "no return type specified"
+
   # A project with its own configuration is checked with it, from any path
   # inside the project.
   printf 'parameters:\n  level: 0\n' > "${TESTDIR}/modules/custom/stantest/phpstan.neon"
@@ -218,6 +227,18 @@ EOF
   assert_output --partial "Missing class doc comment"
   rm -rf "${TESTDIR}/modules/custom"
 
+  # Web commands keep argument boundaries too, so a path with a space in it
+  # reaches the tool as one path instead of being split at the space.
+  run ddev phpcs "modules/custom/no such path"
+  assert_failure
+  assert_output --partial 'The file "modules/custom/no such path" does not exist'
+
+  # A glob that matches nothing stays as it is, so the tool reports it instead
+  # of the run quietly widening to the whole codebase.
+  run ddev phpcs 'modules/custom/nope/*.php'
+  assert_failure
+  assert_output --partial 'The file "modules/custom/nope/*.php" does not exist'
+
   # --db flag: SQLite works
   run ddev phpunit --db=sqlite core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success
@@ -226,6 +247,12 @@ EOF
   run ddev phpunit --db=oracle core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_failure
   assert_output --partial "Unknown database type"
+
+  # Arguments reach PHPUnit whole: the alternation stays inside --filter instead
+  # of turning into a shell pipe in the container.
+  run ddev phpunit --filter 'testConstruction|testCacheMaxAge' core/tests/Drupal/Tests/Core/Access/AccessResultTest.php
+  assert_success
+  assert_output --partial "OK (2 tests"
 
   # commit-code-check finds core's script and passes flags through to it
   run ddev commit-code-check --help
@@ -264,6 +291,10 @@ EOF
   assert_success
   assert_file_exists "${TESTDIR}/modules/contrib/token/token.info.yml"
   assert_git_checkout "${TESTDIR}/modules/contrib/token"
+
+  # The overlay holds user-specific config now, so the generated marker is gone.
+  run grep -q "#ddev-generated" "${TESTDIR}/composer.local.json"
+  assert_failure
 
   # composer update preserves the git checkout
   run ddev composer update
@@ -308,6 +339,12 @@ EOF
   # update-module: clone wse on 3.0.x, switch to 2.0.x, update constraint
   run ddev add-module --https wse 3.0.x
   assert_success
+
+  # The jq program that reads require-dev is full of pipes, so this list only
+  # shows up when the program reaches the container in one piece.
+  assert_output --partial "Dev dependencies (not installed)"
+  assert_output --partial "ddev add-module trash"
+
   run git -C "${TESTDIR}/modules/contrib/wse" symbolic-ref --short HEAD
   assert_output "3.0.x"
   run grep -o '"drupal/wse": "[^"]*"' "${TESTDIR}/composer.local.json"
