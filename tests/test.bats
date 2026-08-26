@@ -264,6 +264,20 @@ EOF
   run ddev commit-code-check
   assert_success
   assert_output --partial "There are no files to check"
+
+  # The project at the root is read from its remotes rather than assumed to be
+  # core, which is what lets a distribution checkout resolve its own repository.
+  run bash -c ". '${TESTDIR}/.ddev/drupal-dev/command-helpers.sh' && drupalcode_project_path '${TESTDIR}'"
+  assert_success
+  assert_output "project/drupal"
+
+  # The version Composer derives from a branch, which is what a merge request
+  # branch is required as. Release branches keep the "-dev" suffix form.
+  run bash -c ". '${TESTDIR}/.ddev/drupal-dev/command-helpers.sh' && composer_branch_version 8.x-1.x && composer_branch_version 3.0.x && composer_branch_version 3609143-do-not-load"
+  assert_success
+  assert_line --index 0 "dev-8.x-1.x"
+  assert_line --index 1 "3.0.x-dev"
+  assert_line --index 2 "dev-3609143-do-not-load"
 }
 
 # bats test_tags=release
@@ -305,6 +319,52 @@ EOF
   run grep -q "modules/contrib/token" "${TESTDIR}/composer.local.json"
   assert_success
   run ddev composer show drupal/token
+  assert_success
+
+  # mr: resolves a merge request number, adds the fork remote, checks out its
+  # branch and points the constraint at the path repository. 133 is merged, so
+  # what it resolves to does not drift.
+  run ddev mr --https token 133
+  assert_success
+  assert_output --partial "3609143-do-not-load -> 8.x-1.x"
+  run git -C "${TESTDIR}/modules/contrib/token" symbolic-ref --short HEAD
+  assert_output "3609143-do-not-load"
+  run grep -o '"drupal/token": "[^"]*"' "${TESTDIR}/composer.local.json"
+  assert_output --partial "dev-3609143-do-not-load"
+
+  # Only the merge request branch is fetched from the fork. A fork carries a
+  # copy of every branch, and those copies would make 'ddev switch' ambiguous.
+  run git -C "${TESTDIR}/modules/contrib/token" for-each-ref --format='%(refname)' 'refs/remotes/token-3609143/*'
+  assert_output "refs/remotes/token-3609143/3609143-do-not-load"
+
+  # mr: an issue number and a merge request URL reach the same merge request
+  git -C "${TESTDIR}/modules/contrib/token" switch -q 8.x-1.x
+  run ddev mr --https token 3609143
+  assert_success
+  assert_output --partial "Merge request !133"
+  git -C "${TESTDIR}/modules/contrib/token" switch -q 8.x-1.x
+  run ddev mr --https https://git.drupalcode.org/project/token/-/merge_requests/133
+  assert_success
+  assert_output --partial "Merge request !133"
+
+  # mr: a number that is neither a merge request nor an issue
+  run ddev mr token 99999999
+  assert_failure
+  assert_output --partial "no merge request 99999999"
+
+  # mr: usage and argument checks
+  run ddev mr
+  assert_failure
+  assert_output --partial "Usage: ddev mr"
+  run ddev mr Bad-Name 1
+  assert_failure
+  assert_output --partial "Invalid module name"
+  run ddev mr token abc
+  assert_failure
+  assert_output --partial "is not a merge request or issue number"
+
+  # Put token back on its release branch for the checks below.
+  run ddev switch token 8.x-1.x
   assert_success
 
   # Rejects a non-git directory at the install path
@@ -476,6 +536,7 @@ EOF
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/switch"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/mr"
 }
 
 @test "pin-core-lock" {

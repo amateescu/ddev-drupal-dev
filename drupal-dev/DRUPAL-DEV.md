@@ -23,6 +23,18 @@ Modules land in `modules/contrib/<name>` as git checkouts.
 ddev switch core 11.x                  # switch core branch + composer update
 ```
 
+## Merge requests
+
+```bash
+ddev mr core 16853                     # a merge request number
+ddev mr core 3563677                   # an issue number, resolved to its merge request
+ddev mr token 136                      # a contrib module's merge request
+ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
+```
+
+Adds the issue fork as a remote, fetches just the merge request branch, checks
+it out and re-solves the overlay. `--https` for a remote you cannot push to.
+
 ## Composer overlay
 
 ```bash

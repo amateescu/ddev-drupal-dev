@@ -33,8 +33,12 @@ if [ "$PROJECT" = "core" ]; then
     exit 1
   fi
 
+  # The project at the root is whatever its remotes say it is, so a distribution
+  # checkout picks its own repository as the canonical one rather than core's.
+  ROOT_PROJECT=$(drupalcode_project_path .) || ROOT_PROJECT="project/drupal"
+
   echo "Switching core to $BRANCH..."
-  switch_to_branch . drupal "$BRANCH"
+  switch_to_branch . "${ROOT_PROJECT#project/}" "$BRANCH"
   sync_container
 
   echo "Updating dependencies..."

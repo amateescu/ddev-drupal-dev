@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Check out the branch of a drupal.org merge request
+## Usage: mr [--https] <project> <merge request or issue number>
+## Example: "ddev mr core 16853", "ddev mr core 3563677" or "ddev mr token 136"
+
+set -e
+
+. "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
+
+USE_HTTPS=false
+
+# Parse flags.
+while [[ "$1" == --* ]]; do
+  case "$1" in
+    --https) USE_HTTPS=true; shift ;;
+    *) echo "Unknown option: $1. Run 'ddev mr' for usage."; exit 1 ;;
+  esac
+done
+
+usage() {
+  echo "Usage: ddev mr [--https] <project> <merge request or issue number>"
+  echo "       ddev mr [--https] <merge request url>"
+  echo ""
+  echo "Adds the issue fork as a remote, checks out the merge request branch"
+  echo "and updates Composer to match. Use 'core' for the checkout at the"
+  echo "project root, or a module name for a module cloned with 'ddev add-module'."
+  echo ""
+  echo "Options:"
+  echo "  --https    Use HTTPS for the fork remote instead of SSH (no push access)"
+  echo ""
+  echo "Examples:"
+  echo "  ddev mr core 16853      # a merge request number"
+  echo "  ddev mr core 3563677    # an issue number, resolved to its merge request"
+  echo "  ddev mr token 136       # a contrib module's merge request"
+  echo "  ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853"
+}
+
+cd "$DDEV_APPROOT"
+
+# The project at the root is whatever its remotes say it is, so this works for a
+# distribution checkout as much as for core.
+ROOT_PATH=$(drupalcode_project_path .) || ROOT_PATH=""
+
+# A merge request URL names the project and the number by itself.
+if [ $# -eq 1 ] && [[ "$1" =~ ^https?://[^/]+/(.+)/-/merge_requests/([0-9]+) ]]; then
+  GITLAB_PATH="${BASH_REMATCH[1]}"
+  NUMBER="${BASH_REMATCH[2]}"
+  if [ "$GITLAB_PATH" = "$ROOT_PATH" ]; then
+    PROJECT="core"
+  else
+    PROJECT="${GITLAB_PATH#project/}"
+  fi
+elif [ $# -eq 2 ]; then
+  PROJECT="$1"
+  NUMBER="$2"
+  if [ "$PROJECT" = "core" ]; then
+    if [ -z "$ROOT_PATH" ]; then
+      echo "Error: no remote of $DDEV_APPROOT points at git.drupalcode.org, so"
+      echo "there is no way to tell which project the root checkout is."
+      exit 1
+    fi
+    GITLAB_PATH="$ROOT_PATH"
+  else
+    validate_module_name "$PROJECT" || {
+      echo "Use 'core' for the checkout at the project root."
+      exit 1
+    }
+    GITLAB_PATH="project/$PROJECT"
+  fi
+else
+  usage
+  exit 1
+fi
+
+if [[ ! "$NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "Error: '$NUMBER' is not a merge request or issue number."
+  exit 1
+fi
+
+# GitLab takes a project path in place of an id, url-encoded.
+ENCODED="${GITLAB_PATH//\//%2F}"
+MR_FIELDS='[.iid, .source_branch, .target_branch, .source_project_id, .state, .title] | @tsv'
+
+# Try the number as a merge request first. Issue numbers are much larger these
+# days, but only asking tells the two apart for certain.
+MR=$(drupalcode_api "projects/$ENCODED/merge_requests/$NUMBER" "$MR_FIELDS")
+
+if [ -z "$MR" ]; then
+  # Not a merge request, so try it as an issue: the fork of an issue is named
+  # after the project and the issue number.
+  echo "No merge request $NUMBER in $GITLAB_PATH, looking for issue $NUMBER..."
+  FORK_ID=$(drupalcode_api "projects/issue%2F${GITLAB_PATH#project/}-$NUMBER" '.id')
+  if [ -z "$FORK_ID" ]; then
+    echo "Error: $GITLAB_PATH has no merge request $NUMBER, and issue $NUMBER has"
+    echo "no fork of it. Check the number on drupal.org."
+    exit 1
+  fi
+
+  # Newest first, so an issue that was reworked lands on its current branch.
+  CANDIDATES=$(drupalcode_api \
+    "projects/$ENCODED/merge_requests?source_project_id=$FORK_ID&state=all" \
+    ".[] | $MR_FIELDS")
+
+  OPEN=$(echo "$CANDIDATES" | awk -F'\t' '$5 == "opened"')
+  if [ "$(echo "$OPEN" | grep -c .)" -gt 1 ]; then
+    echo "Error: issue $NUMBER has more than one open merge request. Pick one:"
+    echo "$OPEN" | awk -F'\t' '{printf "  ddev mr '"$PROJECT"' %s   # %s -> %s\n", $1, $2, $3}'
+    exit 1
+  fi
+
+  # An issue whose merge request is already merged is still worth checking out,
+  # so fall back to the newest one of any state.
+  MR="${OPEN:-$(echo "$CANDIDATES" | head -n 1)}"
+  if [ -z "$MR" ]; then
+    echo "Error: issue $NUMBER has a fork but no merge request in $GITLAB_PATH."
+    exit 1
+  fi
+fi
+
+IFS=$'\t' read -r MR_IID SOURCE_BRANCH TARGET_BRANCH SOURCE_PROJECT_ID MR_STATE MR_TITLE <<< "$MR"
+
+echo "Merge request !$MR_IID ($MR_STATE): $MR_TITLE"
+echo "  $SOURCE_BRANCH -> $TARGET_BRANCH"
+
+FORK=$(drupalcode_api "projects/$SOURCE_PROJECT_ID" \
+  '[.path_with_namespace, .ssh_url_to_repo, .http_url_to_repo] | @tsv')
+if [ -z "$FORK" ]; then
+  echo "Error: could not read the fork that !$MR_IID comes from."
+  exit 1
+fi
+IFS=$'\t' read -r FORK_PATH FORK_SSH FORK_HTTPS <<< "$FORK"
+
+REMOTE="${FORK_PATH##*/}"
+if [ "$USE_HTTPS" = true ]; then
+  REMOTE_URL="$FORK_HTTPS"
+else
+  REMOTE_URL="$FORK_SSH"
+fi
+
+# Work out where the checkout lives.
+if [ "$PROJECT" = "core" ]; then
+  DIR="."
+else
+  DIR=$(get_module_dir "$PROJECT")
+fi
+
+if ! is_git_checkout "$DIR"; then
+  echo "Error: $DIR is not a git checkout."
+  [ "$PROJECT" = "core" ] || echo "Use 'ddev add-module $PROJECT' to clone it first."
+  exit 1
+fi
+
+# An existing remote is left as the user set it up, URL and all.
+if ! git -C "$DIR" remote get-url "$REMOTE" >/dev/null 2>&1; then
+  echo "Adding remote $REMOTE -> $REMOTE_URL"
+  git -C "$DIR" remote add "$REMOTE" "$REMOTE_URL"
+fi
+
+# A fork carries a copy of every branch of the project it came from. Fetching
+# only the merge request branch keeps those copies out of the way, so branch
+# names stay unambiguous for 'ddev switch'.
+echo "Fetching $SOURCE_BRANCH from $REMOTE..."
+git -C "$DIR" fetch -q "$REMOTE" "+refs/heads/$SOURCE_BRANCH:refs/remotes/$REMOTE/$SOURCE_BRANCH"
+
+echo "Switching $PROJECT to $SOURCE_BRANCH..."
+switch_to_branch "$DIR" "${GITLAB_PATH#project/}" "$SOURCE_BRANCH"
+
+# A branch checked out on an earlier run is behind by now, so catch it up. Only
+# a fast-forward, because anything else is the user's own work to reconcile.
+if ! git -C "$DIR" merge --ff-only "$REMOTE/$SOURCE_BRANCH" >/dev/null 2>&1; then
+  echo ""
+  echo "Note: your $SOURCE_BRANCH and $REMOTE/$SOURCE_BRANCH have diverged, so the"
+  echo "checkout was left where it is. See what differs with:"
+  echo "  git -C $DIR log --oneline --left-right $SOURCE_BRANCH...$REMOTE/$SOURCE_BRANCH"
+  echo ""
+fi
+
+sync_container
+
+if [ "$PROJECT" = "core" ]; then
+  echo "Updating dependencies..."
+  ddev composer update
+
+  echo ""
+  printf '\033[32m  Done! core is on !%s (%s), which targets %s\033[0m\n' \
+    "$MR_IID" "$SOURCE_BRANCH" "$TARGET_BRANCH"
+  exit 0
+fi
+
+# A merge request branch is no release branch, so the version comes from the
+# path repository rather than from what drupal.org publishes.
+COMPOSER_VERSION=$(composer_branch_version "$SOURCE_BRANCH")
+
+echo "Updating drupal/$PROJECT to $COMPOSER_VERSION..."
+ddev composer require --no-interaction --update-with-all-dependencies "drupal/$PROJECT:$COMPOSER_VERSION"
+
+echo ""
+printf '\033[32m  Done! drupal/%s is on !%s (%s), which targets %s\033[0m\n' \
+  "$PROJECT" "$MR_IID" "$SOURCE_BRANCH" "$TARGET_BRANCH"

@@ -61,6 +61,45 @@ EOF
   echo "${version:-*}"
 }
 
+# Echoes the result of a git.drupalcode.org API request, passed through a jq
+# filter. Runs in the container, so the host needs neither curl nor jq. Echoes
+# nothing when the request fails, which is how a missing project or merge
+# request shows up.
+#   drupalcode_api "projects/project%2Fdrupal/merge_requests/16853" '.source_branch'
+drupalcode_api() {
+  # The script goes in over stdin, which 'ddev exec --raw' does not forward, so
+  # this stays a plain exec.
+  ddev exec -- bash <<EOF
+curl -fs --max-time 20 "https://git.drupalcode.org/api/v4/$1" | jq -r '$2' 2>/dev/null
+EOF
+}
+
+# Echoes the drupalcode.org project path a checkout came from, like
+# "project/drupal". Reads the remote URLs, so it works for whatever project sits
+# at the root, not just core. Returns 1 when no remote points at drupalcode.
+drupalcode_project_path() {
+  local dir="$1" remote url
+  while read -r remote; do
+    url=$(git -C "$dir" remote get-url "$remote" 2>/dev/null) || continue
+    if [[ "$url" =~ [:/](project/[a-z0-9_]+)(\.git)?/?$ ]]; then
+      echo "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done < <(git -C "$dir" remote 2>/dev/null)
+  return 1
+}
+
+# Echoes the version Composer derives from a branch name for a path repository.
+# A release branch becomes "3.0.x-dev", anything else "dev-<branch>", which is
+# what a merge request branch ends up as.
+composer_branch_version() {
+  if [[ "$1" =~ ^v?[0-9]+(\.[0-9]+)*\.x$ ]]; then
+    echo "$1-dev"
+  else
+    echo "dev-$1"
+  fi
+}
+
 # Echoes the remotes that have a branch, one per line.
 remotes_with_branch() {
   local dir="$1" branch="$2" remote
