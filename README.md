@@ -107,24 +107,14 @@ ddev mr core 16853      # a merge request number
 ddev mr core 3563677    # an issue number, resolved to its merge request
 ddev mr token 136       # a contrib module's merge request
 ddev mr https://git.drupalcode.org/project/drupal/-/merge_requests/16853
-ddev mr https://www.drupal.org/project/drupal/issues/3563677
+ddev mr https://www.drupal.org/project/drupal/issues/3563677    # or the issue page
 ```
 
-Both URL forms work, so you can paste whichever page you are looking at: the merge request on git.drupalcode.org, or the issue on drupal.org.
+For core it ends in `ddev composer update`, which is what clears the "package is in the lock file as 11.x-dev but that does not satisfy your constraint 12.x-dev" failure you get from `ddev composer install` after switching between major branches by hand. For a contrib module the constraint follows the branch the merge request targets.
 
-It reads the merge request from git.drupalcode.org, adds the issue fork as a remote if it is not there yet, fetches the branch, checks it out and updates Composer.
+The branch tracks the fork, so a plain `git push` updates the merge request. Pass `--https` for a remote you cannot push to.
 
-For core that means `ddev composer update`. That is what clears the "package is in the lock file as 11.x-dev but that does not satisfy your constraint 12.x-dev" failure you get from `ddev composer install` after moving between major branches by hand.
-
-For a contrib module the constraint follows the branch the merge request targets, because that is the release branch drupal.org publishes a dev version for. The checkout on the merge request branch is what you edit and run.
-
-The fork remote is set up to track only the merge request branch. A fork has a copy of every branch of the project it was forked from, and those copies are what make a later `git switch 11.x` ambiguous, so they need to stay out even when you run `git fetch --all` yourself.
-
-The branch tracks the fork, so `git commit` and a plain `git push` update the merge request.
-
-`core` means whichever project is at the root, read from its remotes, so this works for a distribution checkout as much as for core itself.
-
-The fork remote uses SSH so you can push back to the merge request. Pass `--https` for a read-only one. An issue with several open merge requests is listed rather than guessed at, and a branch that has diverged from the fork's is left alone with a note.
+`core` means whichever project is at the root, read from its remotes, so a distribution checkout works too. The fork remote is set up to track only the merge request branch, so a fork's copies of `11.x` and `main` stay out of your branch list.
 
 ## Reproducing core's exact dependency versions
 
