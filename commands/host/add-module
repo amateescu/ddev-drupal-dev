@@ -19,7 +19,9 @@ while [[ "$1" == --* ]]; do
   esac
 done
 
-if [ $# -eq 0 ]; then
+# Flags come before the module name, so an extra argument here is usually a
+# misplaced flag or a typo. Either way, show the usage.
+if [ $# -eq 0 ] || [ $# -gt 2 ]; then
   echo "Usage: ddev add-module [--https] <module_name> [branch]"
   echo ""
   echo "Clones a Drupal contrib module, registers it as a path repository"

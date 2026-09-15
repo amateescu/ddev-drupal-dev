@@ -433,6 +433,29 @@ EOF
   run grep -o '"drupal/wse": "[^"]*"' "${TESTDIR}/composer.local.json"
   assert_output --partial "3.0.x-dev"
 
+  # switch --pull: catches up a branch that is behind. Rewinding the local
+  # branch puts the checkout in the same state as one left alone for weeks.
+  git -C "${TESTDIR}/modules/contrib/wse" reset -q --hard HEAD~1
+  run ddev switch --pull wse 3.0.x
+  assert_success
+  assert_output --partial "Fetching 3.0.x from origin"
+  assert_output --partial "Fast-forwarded 3.0.x"
+  # Compare against the tracking ref rather than a tip recorded before the
+  # fetch. A commit pushed to 3.0.x while the test runs would move both.
+  WSE_TIP=$(git -C "${TESTDIR}/modules/contrib/wse" rev-parse refs/remotes/origin/3.0.x)
+  run git -C "${TESTDIR}/modules/contrib/wse" rev-parse HEAD
+  assert_output "${WSE_TIP}"
+
+  # switch: a flag only counts before the project name
+  run ddev switch wse 3.0.x --pull
+  assert_failure
+  assert_output --partial "Usage: ddev switch"
+
+  # switch: rejects an unknown option
+  run ddev switch --nope wse 3.0.x
+  assert_failure
+  assert_output --partial "Unknown option"
+
   # switch: rejects a module that was never cloned
   run ddev switch nonexistent 1.0.x
   assert_failure

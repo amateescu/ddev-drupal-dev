@@ -2,23 +2,39 @@
 
 #ddev-generated
 ## Description: Switch core or a contrib module to another git branch and update dependencies
-## Usage: switch <project> <branch>
+## Usage: switch [--pull] <project> <branch>
 ## Example: "ddev switch core 11.x" or "ddev switch token 2.0.x"
 
 set -e
 
 . "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
 
-if [ $# -lt 2 ]; then
-  echo "Usage: ddev switch <project> <branch>"
+PULL=false
+
+# Parse flags.
+while [[ "$1" == --* ]]; do
+  case "$1" in
+    --pull) PULL=true; shift ;;
+    *) echo "Unknown option: $1. Run 'ddev switch' for usage."; exit 1 ;;
+  esac
+done
+
+# Flags come before the project, so an extra argument here is usually a
+# misplaced flag or a typo. Either way, show the usage.
+if [ $# -ne 2 ]; then
+  echo "Usage: ddev switch [--pull] <project> <branch>"
   echo ""
   echo "Switches a project's git branch and updates Composer to match."
   echo "Use 'core' for the core checkout, or a module name for a contrib"
   echo "module cloned with 'ddev add-module'."
   echo ""
+  echo "Options:"
+  echo "  --pull     Fetch the branch and fast-forward it before Composer runs"
+  echo ""
   echo "Examples:"
-  echo "  ddev switch core 11.x        # switch core, then composer update"
-  echo "  ddev switch token 2.0.x      # switch token, then update its constraint"
+  echo "  ddev switch core 11.x          # switch core, then composer update"
+  echo "  ddev switch --pull core 11.x   # also bring 11.x up to date first"
+  echo "  ddev switch token 2.0.x        # switch token, then update its constraint"
   exit 1
 fi
 
@@ -39,6 +55,13 @@ if [ "$PROJECT" = "core" ]; then
 
   echo "Switching core to $BRANCH..."
   switch_to_branch . "${ROOT_PROJECT#project/}" "$BRANCH"
+
+  # A checkout that cannot be fast-forwarded is left alone and the rest still
+  # runs, because Composer has to match the branch either way.
+  if [ "$PULL" = true ]; then
+    pull_branch . "${ROOT_PROJECT#project/}" "$BRANCH" || true
+  fi
+
   sync_container
 
   echo "Updating dependencies..."
@@ -67,6 +90,11 @@ fi
 
 echo "Switching drupal/$MODULE_NAME to $BRANCH..."
 switch_to_branch "$MODULE_DIR" "$MODULE_NAME" "$BRANCH"
+
+if [ "$PULL" = true ]; then
+  pull_branch "$MODULE_DIR" "$MODULE_NAME" "$BRANCH" || true
+fi
+
 sync_container
 
 # Find the dev version that matches the new branch, so the constraint follows

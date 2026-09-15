@@ -182,3 +182,90 @@ switch_to_branch() {
 sync_container() {
   ddev mutagen sync >/dev/null 2>&1 || true
 }
+
+# Fast-forwards the checked out branch to a ref that was just fetched. Prints a
+# note and returns 1 when it cannot. Anything else is the user's work to merge.
+fast_forward_branch() {
+  local dir="$1" ref="$2" branch git_cmd
+  branch=$(git -C "$dir" symbolic-ref --short HEAD 2>/dev/null) || branch="HEAD"
+
+  git_cmd="git"
+  [ "$dir" = "." ] || git_cmd="git -C $dir"
+
+  # A ref that is not there makes every check below say "not an ancestor",
+  # which would show up as a divergence that does not exist.
+  if ! git -C "$dir" rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+    echo "Note: $ref is not in this checkout, so $branch was left where it is."
+    return 1
+  fi
+
+  # Already has everything the ref has.
+  if git -C "$dir" merge-base --is-ancestor "$ref" HEAD 2>/dev/null; then
+    return 0
+  fi
+
+  if ! git -C "$dir" merge-base --is-ancestor HEAD "$ref" 2>/dev/null; then
+    echo ""
+    echo "Note: your $branch and $ref have diverged, so the checkout was left"
+    echo "where it is. See what differs with:"
+    echo "  $git_cmd log --oneline --left-right $branch...$ref"
+    echo ""
+    return 1
+  fi
+
+  # Only the working tree can stop it now, and git says which files.
+  if ! git -C "$dir" merge -q --ff-only "$ref"; then
+    echo ""
+    echo "Note: $branch could not be fast-forwarded to $ref, so the checkout was"
+    echo "left where it is."
+    echo ""
+    return 1
+  fi
+
+  echo "Fast-forwarded $branch to $ref."
+}
+
+# Fetches the branch a checkout is on and fast-forwards to it. Uses the branch's
+# upstream when it has one, and the canonical drupal.org remote otherwise.
+# Returns 1 when there is no remote to pull from or the checkout could not be
+# fast-forwarded.
+pull_branch() {
+  local dir="$1" project="$2" branch="$3" remote upstream status git_cmd
+
+  git_cmd="git"
+  [ "$dir" = "." ] || git_cmd="git -C $dir"
+
+  remote=$(git -C "$dir" config --get "branch.$branch.remote") || remote=""
+  upstream=$(git -C "$dir" config --get "branch.$branch.merge") || upstream=""
+  upstream="${upstream#refs/heads/}"
+
+  # A branch tracking another local branch has no remote to fetch from, so treat
+  # it the same as one with no upstream at all.
+  if [ -z "$remote" ] || [ "$remote" = "." ]; then
+    remote=$(canonical_remote "$dir" "$project" "$branch") && status=0 || status=$?
+    if [ "$status" -eq 1 ]; then
+      echo "Note: $branch tracks no remote and no remote you have fetched has a"
+      echo "branch of that name, so there is nothing to pull."
+      return 1
+    fi
+    if [ "$status" -eq 2 ]; then
+      echo "Note: $branch tracks no remote, and several remotes have a branch of"
+      echo "that name, so there is no telling which one to pull. Pick one:"
+      echo "  $git_cmd branch --set-upstream-to <remote>/$branch"
+      return 1
+    fi
+    upstream="$branch"
+  fi
+  [ -n "$upstream" ] || upstream="$branch"
+
+  echo "Fetching $upstream from $remote..."
+  # An explicit refspec keeps the fetch to the one branch, so a fork remote's
+  # copies of every other branch stay out of the checkout.
+  if ! git -C "$dir" fetch -q "$remote" "+refs/heads/$upstream:refs/remotes/$remote/$upstream"; then
+    echo "Note: could not fetch $upstream from $remote, so the checkout was left"
+    echo "where it is."
+    return 1
+  fi
+
+  fast_forward_branch "$dir" "$remote/$upstream"
+}

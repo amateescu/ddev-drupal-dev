@@ -197,15 +197,9 @@ git -C "$DIR" fetch -q "$REMOTE" "$REFSPEC"
 echo "Switching $PROJECT to $SOURCE_BRANCH..."
 switch_to_branch "$DIR" "${GITLAB_PATH#project/}" "$SOURCE_BRANCH"
 
-# A branch checked out on an earlier run is behind by now, so catch it up. Only
-# a fast-forward, because anything else is the user's own work to reconcile.
-if ! git -C "$DIR" merge --ff-only "$REMOTE/$SOURCE_BRANCH" >/dev/null 2>&1; then
-  echo ""
-  echo "Note: your $SOURCE_BRANCH and $REMOTE/$SOURCE_BRANCH have diverged, so the"
-  echo "checkout was left where it is. See what differs with:"
-  echo "  git -C $DIR log --oneline --left-right $SOURCE_BRANCH...$REMOTE/$SOURCE_BRANCH"
-  echo ""
-fi
+# A branch checked out on an earlier run is behind by now, so catch it up. A
+# checkout that cannot be fast-forwarded is left alone and the rest still runs.
+fast_forward_branch "$DIR" "$REMOTE/$SOURCE_BRANCH" || true
 
 sync_container
 

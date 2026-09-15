@@ -9,7 +9,7 @@ set -e
 
 . "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
 
-if [ $# -eq 0 ]; then
+if [ $# -ne 1 ]; then
   echo "Usage: ddev update-module <module_name>"
   echo ""
   echo "Updates the composer version constraint for a module after you"
