@@ -9,7 +9,7 @@ set -e
 
 . "$DDEV_APPROOT/.ddev/drupal-dev/command-helpers.sh"
 
-if [ $# -eq 0 ]; then
+if [ $# -ne 1 ]; then
   echo "Usage: ddev remove-module <module_name>"
   echo ""
   echo "Removes a contrib module: uninstalls via composer, removes the path"

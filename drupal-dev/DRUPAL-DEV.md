@@ -11,6 +11,7 @@ ddev add-module token                  # clone + require token
 ddev add-module token 2.0.x            # specific branch
 ddev add-module --https token          # clone over HTTPS (no push access)
 ddev switch token 2.0.x                # switch branch + update constraint
+ddev switch --pull token 2.0.x         # also fast-forward the branch first
 ddev update-module token               # re-sync constraint after switching branches yourself
 ddev remove-module token               # remove require, repo entry, and clone
 ```
@@ -21,6 +22,7 @@ Modules land in `modules/contrib/<name>` as git checkouts.
 
 ```bash
 ddev switch core 11.x                  # switch core branch + composer update
+ddev switch --pull core 11.x           # also fast-forward 11.x first
 ```
 
 ## Merge requests

@@ -58,6 +58,13 @@ Switch a module to another branch and update its Composer constraint in one step
 ddev switch token 2.0.x
 ```
 
+A branch you checked out weeks ago is behind by now. Add `--pull` to fetch it
+and fast-forward before Composer runs:
+
+```bash
+ddev switch --pull token 2.0.x
+```
+
 If you switched the branch yourself (for example from your IDE), re-sync the
 constraint without touching the checkout:
 
@@ -95,6 +102,14 @@ ddev switch core 11.x
 ```
 
 This runs `git switch`, syncs the container, and runs `ddev composer update`. The equivalent by hand is `git switch 11.x && ddev composer update`.
+
+`--pull` fetches the branch and fast-forwards it first, so the update resolves against the code that is on drupal.org today rather than whatever your last checkout left behind:
+
+```bash
+ddev switch --pull core 11.x
+```
+
+The branch is only fast-forwarded. If yours and the remote's have diverged, the checkout is left where it is, with a note on how to see what differs, and the rest of the command still runs.
 
 Branches that don't exist locally yet are created from the canonical drupal.org repository. Issue fork remotes carry the same branch names, so a plain `git switch 11.x` fails with "matched multiple remote tracking branches" once you have a few forks fetched; `ddev switch` picks the project repository instead. This works the same way for contrib modules.
 
@@ -229,7 +244,7 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | `ddev cspell [globs]` | Run cspell with the configuration and words of the checked project |
 | `ddev commit-code-check [flags]` | Run core's pre-commit checks on your changed files |
 | `ddev add-module <name>` | Clone a contrib module for development |
-| `ddev switch <project> <branch>` | Switch core or a module to a branch and update dependencies |
+| `ddev switch [--pull] <project> <branch>` | Switch core or a module to a branch and update dependencies |
 | `ddev mr <project> <number>` | Check out a merge request branch and update dependencies |
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |
 | `ddev remove-module <name>` | Remove a previously cloned contrib module |
