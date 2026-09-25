@@ -1,0 +1,18 @@
+#ddev-generated
+# The default configuration contrib CI uses for a project without one of its own, copied from https://git.drupalcode.org/project/gitlab_templates/-/blob/main/assets/phpstan.neon
+includes:
+  # This placeholder filename will be replaced with the value of variable $_PHPSTAN_BASELINE_FILENAME
+  - BASELINE_PLACEHOLDER
+parameters:
+    level: 0
+    fileExtensions:
+        - php
+        - module
+        - inc
+        - install
+        - theme
+        - profile
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # new static() is a best practice in Drupal, so we cannot fix that.
+        - "#^Unsafe usage of new static#"

@@ -168,7 +168,7 @@ For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgre
 
 ## Code quality checks
 
-PHPStan, PHP CodeSniffer and cspell run with the configuration of the project being checked, falling back to core's:
+PHPStan, PHP CodeSniffer and cspell run with the configuration of the project being checked, or a default one when the project has none:
 
 ```bash
 ddev phpstan core/modules/node         # PHPStan on specific paths
@@ -184,7 +184,13 @@ ddev cspell                            # whole codebase
 
 Paths and globs are relative to the project root. Each command takes the nearest configuration in the checked path or a parent directory, the same way contrib CI picks one up: `phpstan.neon`, `phpstan.neon.dist` or `phpstan.dist.neon` for PHPStan, `.phpcs.xml`, `phpcs.xml`, `.phpcs.xml.dist` or `phpcs.xml.dist` for PHP CodeSniffer, and `.cspell.json`, `cspell.json` or any of the other names cspell itself looks for. Paths belonging to several projects are checked one project at a time.
 
-Contrib projects usually keep their spelling words in `.gitlab-ci.yml` rather than in a cspell configuration, so `ddev cspell` reads the same variables from there that contrib CI does: `_CSPELL_WORDS`, `_CSPELL_IGNORE_PATHS` and the project dictionary file (`.cspell-project-words.txt`, or whatever `_CSPELL_DICTIONARY` names). A project with no cspell configuration of its own falls back to core's, which flags more words than the default configuration contrib CI uses, so the odd extra hit can show up.
+A contrib project (one with a `.gitlab-ci.yml`) is checked the way contrib CI checks it:
+
+- Without a configuration of its own, it gets the default configuration contrib CI uses. That differs from core's: contrib CI's PHP CodeSniffer standard is the full `Drupal` ruleset, where core's skips some rules, such as the line length check in tests. Contrib CI's PHPStan configuration runs at level 0 and adds the project's baseline (`phpstan-baseline.neon`, or whatever `_PHPSTAN_BASELINE_FILENAME` names), where core's runs at level 1 with rules that only core uses. Contrib CI's cspell configuration flags fewer words than core's.
+- PHPStan runs at the level `_PHPSTAN_LEVEL` names, if the project sets it.
+- cspell gets what contrib CI adds to every project's configuration: the words in `_CSPELL_WORDS`, the module names and a few common words, the flagged words in `_CSPELL_FLAGWORDS`, core's dictionaries and the project dictionary (`.cspell-project-words.txt`, or whatever `_CSPELL_DICTIONARY` names). It also skips the paths in `_CSPELL_IGNORE_PATHS` and, unless `_CSPELL_IGNORE_STANDARD_FILES` is `0`, files such as `composer.json` and `CHANGELOG.txt`.
+
+Everything else without a configuration of its own falls back to core's. `_PHPCS_EXTRA`, `_PHPSTAN_EXTRA` and `_CSPELL_EXTRA` are not applied.
 
 `ddev phpstan` analyses against the PHP version core declares in `config.platform`, not the container's runtime version, so results match what core's CI reports.
 

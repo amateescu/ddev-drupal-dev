@@ -11,6 +11,9 @@ project_files:
   - drupal-dev/gitignore
   - drupal-dev/DRUPAL-DEV.md
   - drupal-dev/composer-plugin
+  - drupal-dev/phpcs.contrib.xml.dist
+  - drupal-dev/phpstan.contrib.neon
+  - drupal-dev/cspell.contrib.json
   - commands/host/phpunit
   - commands/host/add-module
   - commands/host/update-module

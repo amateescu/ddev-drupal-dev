@@ -20,8 +20,13 @@ phpcs_config() {
   # The same file names in the same order PHP CodeSniffer looks for itself.
   config=$(config_for "$1" .phpcs.xml phpcs.xml .phpcs.xml.dist phpcs.xml.dist)
 
-  # Core's standard is the fallback for paths that belong to no project with a
-  # standard of its own.
+  # A contrib project without a standard of its own gets the default standard
+  # contrib CI uses for it.
+  if [ -z "$config" ] && [ -n "$(contrib_project "$1")" ]; then
+    config=/mnt/ddev_config/drupal-dev/phpcs.contrib.xml.dist
+  fi
+
+  # Core's standard is the fallback for everything else.
   echo "${config:-$core/phpcs.xml.dist}"
 }
 
