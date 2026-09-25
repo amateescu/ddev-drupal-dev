@@ -107,6 +107,33 @@ config_for() {
   done
 }
 
+# Echoes the directory of the contrib project a path belongs to: the nearest
+# directory with a .gitlab-ci.yml. A .gitlab-ci.yml in the project root or the
+# docroot belongs to core or the site, not to a contrib project. Echoes nothing
+# when the path belongs to no contrib project.
+#   contrib_project modules/contrib/token/src
+contrib_project() {
+  local ci dir docroot
+  ci=$(config_for "$1" .gitlab-ci.yml)
+  [ -n "$ci" ] || return 0
+  dir=$(dirname "$ci")
+
+  # The docroot spelled the way config_for spells directories.
+  docroot=$(realpath -sm --relative-to="${DDEV_APPROOT:-$PWD}" "${DDEV_APPROOT:-$PWD}/${DDEV_DOCROOT:-}")
+  case "$dir" in
+    . | "$docroot") ;;
+    *) echo "$dir" ;;
+  esac
+}
+
+# Echoes a variable from a contrib project's .gitlab-ci.yml as a comma-separated
+# list, or nothing when it is unset. Takes the plain string form, a list, and
+# the "value:" form that GitLab also accepts.
+#   ci_variable modules/contrib/token _CSPELL_WORDS
+ci_variable() {
+  yq "[explode(.) | .variables.$2 // \"\"] | flatten | .[] | (.value // .)" "$1/.gitlab-ci.yml" 2>/dev/null | paste -sd, -
+}
+
 # Groups the paths in PATHS by the configuration the given function returns for
 # each of them. Fills the CONFIGS array with the configurations, in the order
 # they first come up, and the GROUP_PATHS map with the paths of each, one per

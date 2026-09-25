@@ -28,56 +28,107 @@ cspell=("$core/node_modules/.bin/cspell" --root .)
 # own configuration, so runs with any other configuration go without.
 core_cache=(--cache --cache-location "$core/.cspellcache")
 
-# Echoes the configuration that covers a path and the project the path belongs
-# to, as one key. Projects that fall back to core's configuration still need
-# telling apart, because each brings its own words.
+# The default configuration contrib CI uses for a project without one of its own.
+contrib_default=/mnt/ddev_config/drupal-dev/cspell.contrib.json
+
+# Echoes the configuration that covers a path and the contrib project the path
+# belongs to, as one key. Contrib CI adds words from each project to the
+# configuration, so contrib projects need telling apart even when they share one.
 cspell_project() {
   local config project
   config=$(config_for "$1" .cspell.json cspell.json .cSpell.json cspell.config.js cspell.config.cjs cspell.config.json cspell.config.yaml cspell.config.yml cspell.yaml cspell.yml)
-  project=$(config_for "$1" .gitlab-ci.yml)
-  echo "${config:-$core/.cspell.json}|$(dirname "${project:-.}")"
+  project=$(contrib_project "$1")
+
+  # A contrib project without a configuration of its own gets the default
+  # configuration contrib CI uses for it. Core's is the fallback for everything
+  # else.
+  if [ -z "$config" ] && [ -n "$project" ]; then
+    config="$contrib_default"
+  fi
+  echo "${config:-$core/.cspell.json}|$project"
 }
 
-# Echoes a variable from a project's .gitlab-ci.yml as a comma-separated list,
-# or nothing when it is unset. Takes the plain string form, a list, and the
-# "value:" form that GitLab also accepts.
-ci_variable() {
-  yq "[explode(.) | .variables.$2 // \"\"] | flatten | .[] | (.value // .)" "$1" 2>/dev/null | paste -sd, -
-}
-
-# Echoes a configuration that adds what a project declares outside its cspell
-# configuration, layered on top of the configuration given. Contrib CI reads the
-# same variables from .gitlab-ci.yml: _CSPELL_WORDS, _CSPELL_IGNORE_PATHS and
-# the project dictionary file named by _CSPELL_DICTIONARY. Echoes nothing when
-# the project declares none of them.
-words_config() {
-  local config="$1" project="$2" ci words ignore dictionary file
-  ci="$project/.gitlab-ci.yml"
-  [ -f "$ci" ] || return
+# Echoes a configuration for a contrib project, layered on top of the
+# configuration given. It adds what contrib CI adds to every project's
+# configuration in scripts/prepare-cspell.php of gitlab_templates:
+# - the words from _CSPELL_WORDS, the module names and a fixed list of words
+# - the flagged words from _CSPELL_FLAGWORDS
+# - the paths from _CSPELL_IGNORE_PATHS, the directories and files CI creates,
+#   and files that are not the project's own text, such as composer.json,
+#   unless _CSPELL_IGNORE_STANDARD_FILES is 0
+# - core's dictionaries and the project dictionary that _CSPELL_DICTIONARY names
+contrib_config() {
+  local config="$1" project="$2" words flagwords ignore standard dictionary dir names found definition file
+  local -a prune=() definitions=()
 
   # CI drops the spaces and the quotes around each word, but leaves the
   # apostrophes inside words alone. The commas put around the list let the first
   # and the last word lose their quotes the same way the ones between them do.
-  words=$(ci_variable "$ci" _CSPELL_WORDS | tr -d '" ')
+  words=$(ci_variable "$project" _CSPELL_WORDS | tr -d '" ')
   [ -z "$words" ] || words=$(printf ',%s,' "$words" | sed -e "s/,'/,/g" -e "s/',/,/g")
-  ignore=$(ci_variable "$ci" _CSPELL_IGNORE_PATHS | tr -d "\"' ")
-  dictionary=$(ci_variable "$ci" _CSPELL_DICTIONARY)
+  flagwords=$(ci_variable "$project" _CSPELL_FLAGWORDS | tr -d "\"' ")
+  ignore=$(ci_variable "$project" _CSPELL_IGNORE_PATHS | tr -d "\"' ")
+  standard=$(ci_variable "$project" _CSPELL_IGNORE_STANDARD_FILES)
+  dictionary=$(ci_variable "$project" _CSPELL_DICTIONARY)
   dictionary="$project/${dictionary:-.cspell-project-words.txt}"
-  [ -f "$dictionary" ] && dictionary=$(realpath "$dictionary") || dictionary=""
-  [ -n "$words$ignore$dictionary" ] || return
+
+  # CI skips the same directories when it looks through the project's files.
+  for dir in web vendor node_modules .git recipes; do
+    prune+=(-path "$project/$dir" -prune -o)
+  done
+
+  # Module names count as words: the project name up to the first "-", and the
+  # name of each .info.yml file, split at the underscores.
+  names=$({
+    basename "$project" | cut -d- -f1
+    find "$project" "${prune[@]}" -name '*.info.yml' -printf '%f\n' | sed 's/\.info\.yml$//'
+  } | tr _ '\n')
+
+  # Licence, changelog and composer files are not checked. CI finds them by the
+  # part of the file name before the first dot, in any case.
+  found=$(find "$project" "${prune[@]}" -type f -regextype posix-extended \
+    -iregex '.*/(license|copyright|maintainers|changelog|composer)\.[^/]*' -printf '%P\n')
+
+  # Dictionary files that don't exist are left out, the same as in CI.
+  for definition in "drupal=$core/misc/cspell/drupal-dictionary.txt" "dictionary=$core/misc/cspell/dictionary.txt" "project-words=$dictionary"; do
+    [ -f "${definition#*=}" ] && definitions+=("${definition%%=*}=$(realpath "${definition#*=}")")
+  done
 
   file=$(mktemp -t cspell-XXXXXX.json)
   jq -n --arg config "$(realpath "$config")" --arg project "$(realpath "$project")" \
-    --arg words "$words" --arg ignore "$ignore" --arg dictionary "$dictionary" \
-    '{
+    --arg words "$words" --arg names "$names" --arg flagwords "$flagwords" \
+    --arg ignore "$ignore" --arg standard "$standard" --arg found "$found" \
+    --arg definitions "$(printf '%s\n' "${definitions[@]}")" \
+    'def list($separator): split($separator) | map(select(length > 0));
+     ($definitions | list("\n") | map(capture("^(?<name>[^=]+)=(?<path>.*)$"))) as $definitions
+     | {
        import: [$config],
        globRoot: $project,
-       words: ($words | split(",") | map(select(length > 0))),
-       ignorePaths: ($ignore | split(",") | map(select(length > 0)))
-     }
-     + if $dictionary == "" then {}
-       else {dictionaryDefinitions: [{name: "project-words", path: $dictionary}], dictionaries: ["project-words"]}
-       end' > "$file"
+       words: (($words | list(",")) + ($names | list("\n")) + [
+         "lando", "ddev",
+         "endapply", "nightwatchjs", "testgroup", "testgroups", "backlinks", "mdhash", "uploaders", "vocabs",
+         "curlopt", "returntransfer", "curle", "customrequest", "failonerror", "postfields", "followlocation",
+         "colourdefinitionsniff", "seletorsingleline", "teamplatespacingaftercomment", "tforvalue",
+         "trhowscommentindentation", "unecessaryfiledeclaration",
+         "blocklisted",
+         "flagwords", "mkdocs", "autorun", "runtests"
+       ] | unique),
+       flagWords: ($flagwords | list(",")),
+       ignorePaths: ([
+         "web", "vendor", "node_modules", ".git", "recipes",
+         "*.patch", "*.svg", "*_ignore_*", "build.env", "get-file-via-curl.sh",
+         "_cspell_unrecognized_words.txt", "_cspell_updated_project_words.txt"
+       ]
+       + if $standard == "0" then []
+         else ["**/.*.json", "package.json", "yarn.lock", "phpstan*", ".*ignore"] + ($found | list("\n"))
+         end
+       + ($ignore | list(","))),
+       dictionaryDefinitions: $definitions,
+       dictionaries: ([
+         "companies", "fonts", "html", "php", "softwareTerms", "misc", "typescript", "node",
+         "css", "bash", "filetypes", "npm", "lorem-ipsum", "sql", "fullstack"
+       ] + ($definitions | map(.name)))
+     }' > "$file"
   echo "$file"
 }
 
@@ -104,23 +155,20 @@ for key in "${CONFIGS[@]}"; do
   project="${key#*|}"
 
   cache=()
-  overlay=$(words_config "$config" "$project")
-  if [ -n "$overlay" ]; then
-    generated+=("$overlay")
-    run_config="$overlay"
-    added=", plus the words it declares"
+  if [ -n "$project" ]; then
+    run_config=$(contrib_config "$config" "$project")
+    generated+=("$run_config")
   else
     run_config="$config"
-    added=""
     [ "$config" = "$core/.cspell.json" ] && cache=("${core_cache[@]}")
   fi
 
   # One project, so hand the arguments over the way they came in. Otherwise name
-  # the project too, because several of them can share core's configuration.
+  # the project too, because several of them can share the default configuration.
   if [ "${#CONFIGS[@]}" -eq 1 ]; then
     args=("$@")
   else
-    [ "$project" = "." ] && echo "Checking with $config" || echo "Checking $project with $config$added"
+    [ -z "$project" ] && echo "Checking with $config" || echo "Checking $project with $config, plus what contrib CI adds"
     mapfile -t group < <(paths_of "$key")
     args=("${FLAGS[@]}" "${group[@]}")
   fi

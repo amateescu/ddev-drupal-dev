@@ -227,6 +227,92 @@ EOF
   assert_output --partial "Missing class doc comment"
   rm -rf "${TESTDIR}/modules/custom"
 
+  # A .gitlab-ci.yml marks a contrib project, and one without a configuration of
+  # its own is checked with the default one contrib CI uses. Contrib CI's PHP
+  # CodeSniffer standard checks the line length of comments in tests, where
+  # core's does not. Contrib CI's PHPStan configuration runs at level 0, where
+  # core's runs at level 1 and reports a variable that might not be defined.
+  project="${TESTDIR}/modules/contrib/contribtest"
+  mkdir -p "${project}/src" "${project}/tests/src"
+  cat > "${project}/tests/src/Example.php" <<'EOF'
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\Tests\contribtest;
+
+/**
+ * Checks the line length of comments in tests.
+ */
+class Example {
+
+  /**
+   * Returns a value.
+   */
+  public function value(): int {
+    // This comment is one character longer than the line length limit allows it.
+    return 1;
+  }
+
+}
+EOF
+  cat > "${project}/src/Plain.php" <<'EOF'
+<?php
+
+declare(strict_types=1);
+
+namespace Drupal\contribtest;
+
+/**
+ * Returns a value that is not always set.
+ */
+class Plain {
+
+  /**
+   * Returns a value.
+   */
+  public function value(bool $set): int {
+    if ($set) {
+      $value = 1;
+    }
+    return $value;
+  }
+
+}
+EOF
+  run ddev phpcs modules/contrib/contribtest
+  assert_success
+  run ddev phpstan modules/contrib/contribtest
+  assert_failure
+  assert_output --partial "might not be defined"
+  printf 'include: []\n' > "${project}/.gitlab-ci.yml"
+  run ddev phpcs modules/contrib/contribtest
+  assert_failure
+  assert_output --partial "Line exceeds 80 characters"
+  run ddev phpstan modules/contrib/contribtest
+  assert_success
+
+  # PHPStan runs at the level _PHPSTAN_LEVEL names, and the default
+  # configuration takes in the project's baseline.
+  printf 'variables:\n  _PHPSTAN_LEVEL: 1\n' > "${project}/.gitlab-ci.yml"
+  run ddev phpstan modules/contrib/contribtest
+  assert_failure
+  assert_output --partial "might not be defined"
+  printf 'parameters:\n  ignoreErrors:\n    - identifier: variable.undefined\n' > "${project}/phpstan-baseline.neon"
+  run ddev phpstan modules/contrib/contribtest
+  assert_success
+
+  # Core has a .gitlab-ci.yml too, but its files keep core's configuration.
+  run ddev phpcs modules/contrib/contribtest core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_failure
+  assert_output --partial "Checking with /mnt/ddev_config/drupal-dev/phpcs.contrib.xml.dist"
+  assert_output --partial "Checking with core/phpcs.xml.dist"
+  run ddev phpstan modules/contrib/contribtest core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "Analysing modules/contrib/contribtest with /mnt/ddev_config/drupal-dev/phpstan.contrib.neon at level 1"
+  assert_output --partial "Analysing with core/phpstan-partial.neon"
+  rm -rf "${TESTDIR}/modules/contrib"
+
   # Web commands keep argument boundaries too, so a path with a space in it
   # reaches the tool as one path instead of being split at the space.
   run ddev phpcs "modules/custom/no such path"
