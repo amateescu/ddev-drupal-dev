@@ -9,6 +9,10 @@
 #   bats ./tests/test.bats
 # To exclude release tests:
 #   bats ./tests/test.bats --filter-tags '!release'
+# CI runs "module management", tagged "modules", in a job of its own next to a
+# job for the rest. To run what one of them runs for a pull request:
+#   bats ./tests/test.bats --filter-tags 'modules,!release'
+#   bats ./tests/test.bats --filter-tags '!modules,!release'
 # For debugging:
 #   bats ./tests/test.bats --show-output-of-passing-tests --verbose-run --print-output-on-failure
 
@@ -493,6 +497,7 @@ EOF
   health_checks
 }
 
+# bats test_tags=modules
 @test "module management" {
   set -eu -o pipefail
 
