@@ -2,6 +2,7 @@
 tests/ export-ignore
 .github/ export-ignore
 .gitattributes export-ignore
+.editorconfig export-ignore
 docs/ export-ignore
 zensical.toml export-ignore
 .gitignore export-ignore
