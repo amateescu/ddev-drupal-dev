@@ -30,9 +30,22 @@ permissions:
 
 jobs:
   tests:
+    name: tests (${{ matrix.ddev_version }}, ${{ matrix.group }})
     strategy:
       matrix:
-        ddev_version: [stable, HEAD]
+        # Pull requests run against DDEV stable only. The nightly run and pushes
+        # to main also run against DDEV HEAD, to catch DDEV changes that break
+        # the add-on.
+        ddev_version: ${{ fromJSON(github.event_name == 'pull_request' && '["stable"]' || '["stable", "HEAD"]') }}
+        # The tests run in two jobs side by side, each with a project of its own.
+        # "module management" is tagged "modules" and takes about as long as all
+        # the other tests together. A test without a tag runs in the "core" job.
+        group: [core, modules]
+        include:
+          - group: core
+            filter: '!modules'
+          - group: modules
+            filter: modules
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -45,3 +58,7 @@ jobs:
           debug_enabled: ${{ github.event.inputs.debug_enabled }}
           addon_repository: ${{ env.GITHUB_REPOSITORY }}
           addon_ref: ${{ env.GITHUB_REF }}
+          # Release tests install the latest published release, so pull requests
+          # and pushes skip them, the same as the action does without a
+          # test_command.
+          test_command: bats tests --filter-tags ${{ matrix.filter }}${{ (github.event_name == 'pull_request' || github.event_name == 'push') && ',!release' || '' }}
