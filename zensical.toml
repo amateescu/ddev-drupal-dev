@@ -1,0 +1,71 @@
+[project]
+site_name = "DDEV Drupal Dev"
+site_url = "https://amateescu.github.io/ddev-drupal-dev/"
+site_description = "A DDEV add-on for working on Drupal core and contrib modules together"
+site_author = "Andrei Mateescu"
+repo_url = "https://github.com/amateescu/ddev-drupal-dev"
+repo_name = "amateescu/ddev-drupal-dev"
+edit_uri = "edit/main/docs/"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Guides" = [
+    "guides/contrib-modules.md",
+    "guides/core.md",
+    "guides/merge-requests.md",
+    "guides/dependencies.md",
+    "guides/testing.md",
+    "guides/code-quality.md",
+    "guides/host.md",
+  ] },
+  { "Reference" = [
+    "reference/commands.md",
+    "reference/cheat-sheet.md",
+    "reference/how-it-works.md",
+  ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.action.edit",
+  "content.code.copy",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+# The cheat sheet page includes drupal-dev/DRUPAL-DEV.md, which the add-on also
+# installs into projects. Paths are relative to the repository root.
+pymdownx.snippets.check_paths = true
+pymdownx.superfences = {}

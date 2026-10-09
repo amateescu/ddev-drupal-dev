@@ -1,0 +1,54 @@
+name: docs
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "drupal-dev/DRUPAL-DEV.md"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [ main ]
+    paths:
+      - "docs/**"
+      - "drupal-dev/DRUPAL-DEV.md"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.x
+      # Zensical is in alpha and changes quickly, so bump this on purpose.
+      - run: pip install zensical==0.0.69
+      # Strict mode fails the build on broken links and missing pages.
+      - run: zensical build --clean --strict
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment

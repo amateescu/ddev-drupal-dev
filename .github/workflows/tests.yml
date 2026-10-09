@@ -3,10 +3,14 @@ on:
   pull_request:
     paths-ignore:
       - "**.md"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
   push:
     branches: [ main ]
     paths-ignore:
       - "**.md"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
 
   schedule:
     - cron: '25 08 * * *'
