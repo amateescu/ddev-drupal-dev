@@ -161,10 +161,20 @@ Tests run against your project's configured database by default. Use `--db` to s
 ddev phpunit core/modules/node                  # project database (default)
 ddev phpunit --db=sqlite core/modules/node      # SQLite
 ddev phpunit --db=pgsql core/modules/node       # PostgreSQL
+ddev phpunit --db=mariadb core/modules/node     # MariaDB
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
 For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgres) add-on first.
+
+For MariaDB on a project whose database is MySQL, add a second database container from the example the add-on installs, then set its image tag to the MariaDB version you want to test:
+
+```bash
+sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.mariadb.yaml.example > .ddev/docker-compose.mariadb.yaml
+ddev restart
+```
+
+On a project whose database is MariaDB, `--db=mariadb` uses the project database and needs no extra container.
 
 ## Code quality checks
 

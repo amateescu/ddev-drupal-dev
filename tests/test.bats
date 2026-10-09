@@ -101,6 +101,10 @@ health_checks() {
   run grep -q "#ddev-generated" "${TESTDIR}/.gitignore"
   assert_success
 
+  # Verify the MariaDB compose example is installed but not active
+  assert_file_exists "${TESTDIR}/.ddev/drupal-dev/docker-compose.mariadb.yaml.example"
+  assert_file_not_exists "${TESTDIR}/.ddev/docker-compose.mariadb.yaml"
+
   # Verify the cheat sheet was copied and is gitignored
   assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
   run grep -qxF "/DRUPAL-DEV.md" "${TESTDIR}/.gitignore"
@@ -328,6 +332,12 @@ EOF
   # --db flag: SQLite works
   run ddev phpunit --db=sqlite core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success
+
+  # --db flag: MariaDB uses the project database, DDEV's default. A Kernel test
+  # so the run actually connects to it.
+  run ddev phpunit --db=mariadb --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: mariadb"
 
   # --db flag: unknown value fails with a helpful message
   run ddev phpunit --db=oracle core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
