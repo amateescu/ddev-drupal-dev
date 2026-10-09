@@ -12,16 +12,18 @@
 # For debugging:
 #   bats ./tests/test.bats --show-output-of-passing-tests --verbose-run --print-output-on-failure
 
-setup() {
+# All tests share one project, a core clone with the add-on installed from the
+# local directory. Starting a project, installing the add-on and running
+# composer install take most of a minute, so this runs once instead of before
+# every test. setup() resets what the tests change.
+setup_file() {
   set -eu -o pipefail
 
   export GITHUB_REPO=amateescu/ddev-drupal-dev
 
   TEST_BREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
   export BATS_LIB_PATH="${BATS_LIB_PATH}:${TEST_BREW_PREFIX}/lib:/usr/lib/bats"
-  bats_load_library bats-assert
-  bats_load_library bats-file
-  bats_load_library bats-support
+  load_libraries
 
   export DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." >/dev/null 2>&1 && pwd)"
   export PROJNAME="test-$(basename "${GITHUB_REPO}")"
@@ -29,27 +31,72 @@ setup() {
   export TESTDIR="$(mktemp -d "${HOME}/tmp/${PROJNAME}.XXXXXX")"
   export DDEV_NONINTERACTIVE=true
   export DDEV_NO_INSTRUMENTATION=true
-  ddev delete -Oy "${PROJNAME}" >/dev/null 2>&1 || true
-
-  # Clone Drupal core as the test project
-  git clone --depth=1 --branch 11.x https://git.drupalcode.org/project/drupal.git "${TESTDIR}"
-  cd "${TESTDIR}"
 
   # Ignore Composer security advisories in tests
   export COMPOSER_NO_SECURITY_BLOCKING=1
 
-  run ddev config --project-name="${PROJNAME}" --project-tld=ddev.site --project-type=drupal11 --php-version=8.3
+  create_project "${TESTDIR}" "${PROJNAME}"
+
+  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in ${TESTDIR}" >&3
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  run ddev composer install
+  assert_success
+
+  # Keep a copy of the Composer files that tests change, for setup() to put
+  # back.
+  cp composer.local.json composer.local.lock "${BATS_FILE_TMPDIR}/"
+}
+
+setup() {
+  set -eu -o pipefail
+  load_libraries
+  cd "${TESTDIR}"
+  reset_project
+}
+
+# setup_file and each test run in separate processes, and only exported
+# variables carry over, so both load the libraries.
+load_libraries() {
+  bats_load_library bats-assert
+  bats_load_library bats-file
+  bats_load_library bats-support
+}
+
+# Clones Drupal core into a directory and starts a DDEV project there.
+# Usage: create_project <dir> <project name>.
+create_project() {
+  ddev delete -Oy "$2" >/dev/null 2>&1 || true
+  git clone --depth=1 --branch 11.x https://git.drupalcode.org/project/drupal.git "$1"
+  cd "$1"
+  run ddev config --project-name="$2" --project-tld=ddev.site --project-type=drupal11 --php-version=8.3
   assert_success
   run ddev start -y
   assert_success
 }
 
-# Install the addon from the local directory and run composer install.
-addon_setup() {
-  run ddev add-on get "${DIR}"
-  assert_success
-  run ddev restart -y
-  assert_success
+# Puts the shared project back the way setup_file left it, so a test does not
+# depend on what the tests before it did, or on whether they passed.
+reset_project() {
+  # "addon removal" uninstalls the add-on. It runs last, so this only kicks in
+  # when tests run in another order.
+  if [ ! -f .ddev/config.drupal-dev.yaml ]; then
+    run ddev add-on get "${DIR}"
+    assert_success
+    run ddev restart -y
+    assert_success
+  fi
+
+  # Restore core's tracked files and remove everything under modules/, where
+  # tests put their modules and clones. The project root is not cleaned,
+  # because without the add-on's .gitignore that would delete .ddev and vendor
+  # too.
+  git checkout -q -- .
+  git clean -ffdxq -- modules
+
+  cp "${BATS_FILE_TMPDIR}/composer.local.json" "${BATS_FILE_TMPDIR}/composer.local.lock" .
   run ddev composer install
   assert_success
 }
@@ -134,6 +181,14 @@ health_checks() {
 }
 
 teardown() {
+  # Only the release test makes a project of its own.
+  if [ -n "${RELEASE_TESTDIR:-}" ]; then
+    ddev delete -Oy "${RELEASE_PROJNAME}" >/dev/null 2>&1 || true
+    rm -rf "${RELEASE_TESTDIR}"
+  fi
+}
+
+teardown_file() {
   set -eu -o pipefail
   ddev delete -Oy "${PROJNAME}" >/dev/null 2>&1
   # Persist TESTDIR if running inside GitHub Actions. Useful for uploading test result artifacts
@@ -147,11 +202,7 @@ teardown() {
 
 @test "install from directory" {
   set -eu -o pipefail
-  echo "# ddev add-on get ${DIR} with project ${PROJNAME} in $(pwd)" >&3
-  run ddev add-on get "${DIR}"
-  assert_success
-  run ddev restart -y
-  assert_success
+  # setup_file installed the add-on from the local directory.
   health_checks
 
   # A project with no configuration of its own is checked with core's, which
@@ -428,7 +479,13 @@ EOF
 # bats test_tags=release
 @test "install from release" {
   set -eu -o pipefail
-  echo "# ddev add-on get ${GITHUB_REPO} with project ${PROJNAME} in $(pwd)" >&3
+  # The release goes on a project of its own, so the shared project keeps the
+  # add-on from the local directory.
+  RELEASE_PROJNAME="${PROJNAME}-release"
+  RELEASE_TESTDIR="$(mktemp -d "${HOME}/tmp/${RELEASE_PROJNAME}.XXXXXX")"
+  TESTDIR="${RELEASE_TESTDIR}"
+  create_project "${TESTDIR}" "${RELEASE_PROJNAME}"
+  echo "# ddev add-on get ${GITHUB_REPO} with project ${RELEASE_PROJNAME} in ${TESTDIR}" >&3
   run ddev add-on get "${GITHUB_REPO}"
   assert_success
   run ddev restart -y
@@ -438,7 +495,6 @@ EOF
 
 @test "module management" {
   set -eu -o pipefail
-  addon_setup
 
   # Rejects invalid module name
   run ddev add-module Invalid-Name
@@ -695,54 +751,8 @@ EOF
   assert_file_not_exists "${TESTDIR}/modules/token"
 }
 
-@test "addon removal" {
-  set -eu -o pipefail
-  addon_setup
-
-  # Customized composer.local.json (marker stripped) is preserved on removal
-  sed -i '/"_comment": "#ddev-generated"/d' "${TESTDIR}/composer.local.json"
-  run grep -q "#ddev-generated" "${TESTDIR}/composer.local.json"
-  assert_failure
-  run ddev add-on remove drupal-dev
-  assert_success
-  assert_file_exists "${TESTDIR}/composer.local.json"
-
-  # Re-install with an unmodified composer.local.json (remove the customized
-  # one first so the post-install action copies a fresh copy with the marker)
-  rm "${TESTDIR}/composer.local.json"
-  run ddev add-on get "${DIR}"
-  assert_success
-  run ddev restart -y
-  assert_success
-  run ddev composer install
-  assert_success
-
-  # Unmodified files are all cleaned up on removal
-  assert_file_exists "${TESTDIR}/composer.local.json"
-  assert_file_exists "${TESTDIR}/.envrc"
-  assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
-  run ddev add-on remove drupal-dev
-  assert_success
-  refute_output --partial "Unwilling to remove"
-  assert_file_not_exists "${TESTDIR}/composer.local.json"
-  assert_file_not_exists "${TESTDIR}/composer.local.lock"
-  assert_file_not_exists "${TESTDIR}/.envrc"
-  assert_file_not_exists "${TESTDIR}/.gitignore"
-  assert_file_not_exists "${TESTDIR}/DRUPAL-DEV.md"
-  assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
-  assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/add-module"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/switch"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/mr"
-  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/autocomplete/switch"
-}
-
 @test "pin-core-lock" {
   set -eu -o pipefail
-  addon_setup
 
   # Flag off (default): no pinning hint on a fresh solve.
   rm -f "${TESTDIR}/composer.local.lock"
@@ -821,7 +831,6 @@ PY
 
 @test "config-platform" {
   set -eu -o pipefail
-  addon_setup
 
   if ! python3 -c "import json, sys; sys.exit(0 if json.load(open('${TESTDIR}/composer.json')).get('config', {}).get('platform') else 1)"; then
     skip "core composer.json does not declare config.platform"
@@ -876,4 +885,50 @@ d = json.load(open(p))
 d['config'].pop('platform')
 json.dump(d, open(p, 'w'), indent=4)
 "
+}
+
+# Runs last, because it leaves the add-on uninstalled and the next test would
+# have to install it again.
+@test "addon removal" {
+  set -eu -o pipefail
+
+  # Customized composer.local.json (marker stripped) is preserved on removal
+  sed -i '/"_comment": "#ddev-generated"/d' "${TESTDIR}/composer.local.json"
+  run grep -q "#ddev-generated" "${TESTDIR}/composer.local.json"
+  assert_failure
+  run ddev add-on remove drupal-dev
+  assert_success
+  assert_file_exists "${TESTDIR}/composer.local.json"
+
+  # Re-install with an unmodified composer.local.json (remove the customized
+  # one first so the post-install action copies a fresh copy with the marker)
+  rm "${TESTDIR}/composer.local.json"
+  run ddev add-on get "${DIR}"
+  assert_success
+  run ddev restart -y
+  assert_success
+  run ddev composer install
+  assert_success
+
+  # Unmodified files are all cleaned up on removal
+  assert_file_exists "${TESTDIR}/composer.local.json"
+  assert_file_exists "${TESTDIR}/.envrc"
+  assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
+  run ddev add-on remove drupal-dev
+  assert_success
+  refute_output --partial "Unwilling to remove"
+  assert_file_not_exists "${TESTDIR}/composer.local.json"
+  assert_file_not_exists "${TESTDIR}/composer.local.lock"
+  assert_file_not_exists "${TESTDIR}/.envrc"
+  assert_file_not_exists "${TESTDIR}/.gitignore"
+  assert_file_not_exists "${TESTDIR}/DRUPAL-DEV.md"
+  assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
+  assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/add-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/switch"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/mr"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/autocomplete/switch"
 }
