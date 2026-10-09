@@ -1,12 +1,11 @@
 <!-- #ddev-generated -->
 # ddev-drupal-dev cheat sheet
 
-Quick reference for the most common commands. See the [full README](https://github.com/amateescu/ddev-drupal-dev) for details.
+Quick reference for the most common commands. See the [documentation](https://amateescu.github.io/ddev-drupal-dev/) for details.
 
 ## Contrib modules
 
 ```bash
-ddev auth ssh                          # forward SSH keys (once per session)
 ddev add-module token                  # clone + require token
 ddev add-module token 2.0.x            # specific branch
 ddev add-module --https token          # clone over HTTPS (no push access)

@@ -11,6 +11,8 @@ Other add-ons target either core or contrib in isolation. This one is for when y
 
 Extra dependencies (contrib modules, Drush, dev tools) are managed through a `composer.local.json` overlay, keeping core's `composer.json` and `composer.lock` untouched.
 
+The full documentation is at **https://amateescu.github.io/ddev-drupal-dev/**.
+
 ## Installation
 
 Clone Drupal core and configure DDEV to use it as the project root:
