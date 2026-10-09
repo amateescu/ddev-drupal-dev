@@ -56,6 +56,7 @@ The overlay lives in `composer.local.json`; core's `composer.json` and `composer
 ddev phpunit core/modules/node                  # project database (default)
 ddev phpunit --db=sqlite core/modules/node      # SQLite
 ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (needs ddev-postgres)
+ddev phpunit --db=mariadb core/modules/node     # MariaDB (see .ddev/drupal-dev/docker-compose.mariadb.yaml.example)
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
