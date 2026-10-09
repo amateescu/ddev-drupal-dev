@@ -3,15 +3,18 @@
 #ddev-generated
 ## Description: Run PHPStan with the configuration of the project being analysed
 ## Usage: phpstan [flags] [paths]
-## Example: "ddev phpstan core/modules/node", "ddev phpstan modules/contrib/token" or "ddev phpstan" for the full analysis
+## Example: "ddev phpstan core/modules/node", "ddev phpstan modules/contrib/token" or "ddev phpstan" for the current directory
 ## ExecRaw: true
+## HostWorkingDir: true
 
 # ExecRaw keeps the arguments as they came in; without it ddev joins them and a
 # shell in the container splits them again, turning a path with a space into two.
+# HostWorkingDir runs the command in the directory it was started from on the
+# host, so paths are relative to that directory.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
-core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+core="$DDEV_APPROOT/${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
 
 # The default configuration contrib CI uses for a project without one of its own.
 contrib_default=/mnt/ddev_config/drupal-dev/phpstan.contrib.neon
@@ -19,9 +22,11 @@ contrib_default=/mnt/ddev_config/drupal-dev/phpstan.contrib.neon
 # PHPStan reads config.platform from the composer file that $COMPOSER points at,
 # which is the overlay. Point it at core's composer.json so it analyses against
 # the PHP version core declares instead of the container's runtime version.
+# PHPStan looks for that file next to the vendor directory it runs from, not in
+# the current directory, so this holds from any directory.
 export COMPOSER=composer.json
 
-phpstan=(php -d apc.enabled=0 -d apc.enable_cli=0 vendor/bin/phpstan analyze)
+phpstan=(php -d apc.enabled=0 -d apc.enable_cli=0 "$DDEV_APPROOT/vendor/bin/phpstan" analyze)
 
 # Echoes the configuration that covers a path and the contrib project the path
 # belongs to, as one key. Contrib CI adds settings from each project's
@@ -73,10 +78,17 @@ set -- "${ARGS[@]}"
 
 split_args "-a|-b|-c|-l|--autoload-file|--configuration|--error-format|--generate-baseline|--instead-of|--level|--memory-limit|--tmp-file" "$@"
 
-# A run without paths is the whole codebase, which is what core's full
-# configuration and its baseline are for.
+# A run without paths checks the directory it was started from. From the project
+# root that is the whole codebase, which is what core's full configuration and
+# its baseline are for.
 if [ "${#PATHS[@]}" -eq 0 ]; then
-  exec "${phpstan[@]}" --configuration="$core/phpstan.neon.dist" "$@"
+  if at_project_root; then
+    exec "${phpstan[@]}" --configuration="$core/phpstan.neon.dist" "$@"
+  fi
+  # The path goes first, so an option at the end that takes an optional value
+  # does not take the path for its value.
+  set -- . "$@"
+  PATHS=(.)
 fi
 
 # The paths can belong to several projects, so run each configuration in turn
@@ -107,7 +119,7 @@ for key in "${CONFIGS[@]}"; do
     exec "${phpstan[@]}" --configuration="$run_config" "${level[@]}" "$@"
   fi
 
-  [ -z "$project" ] && echo "Analysing with $config" || echo "Analysing $project with $config$added"
+  [ -z "$project" ] && echo "Analysing with $(shown_path "$config")" || echo "Analysing $(shown_path "$project") with $(shown_path "$config")$added"
   mapfile -t group < <(paths_of "$key")
   "${phpstan[@]}" --configuration="$run_config" "${level[@]}" "${FLAGS[@]}" "${group[@]}" || status=$?
 done

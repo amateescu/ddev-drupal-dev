@@ -3,17 +3,20 @@
 #ddev-generated
 ## Description: Run PHP CodeSniffer with the coding standard of the project being checked
 ## Usage: phpcs [flags] [paths]
-## Example: "ddev phpcs core/modules/node", "ddev phpcs modules/contrib/token" or "ddev phpcs" for the whole codebase
+## Example: "ddev phpcs core/modules/node", "ddev phpcs modules/contrib/token" or "ddev phpcs" for the current directory
 ## ExecRaw: true
+## HostWorkingDir: true
 
 # ExecRaw keeps the arguments as they came in; without it ddev joins them and a
 # shell in the container splits them again, turning a path with a space into two.
+# HostWorkingDir runs the command in the directory it was started from on the
+# host, so paths are relative to that directory.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
-core="${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
+core="$DDEV_APPROOT/${DDEV_DOCROOT:+$DDEV_DOCROOT/}core"
 
-phpcs=(vendor/bin/phpcs -ps --parallel="$(nproc)")
+phpcs=("$DDEV_APPROOT/vendor/bin/phpcs" -ps --parallel="$(nproc)")
 
 phpcs_config() {
   local config
@@ -38,10 +41,15 @@ set -- "${ARGS[@]}"
 # PHP CodeSniffer options carry their value after an "=", apart from -d.
 split_args "-d" "$@"
 
-# A run without paths is the whole codebase, which core's standard already lists
-# the files for.
+# A run without paths checks the directory it was started from. From the project
+# root that is the whole codebase, which core's standard already lists the files
+# for.
 if [ "${#PATHS[@]}" -eq 0 ]; then
-  exec "${phpcs[@]}" --standard="$core/phpcs.xml.dist" "$@"
+  if at_project_root; then
+    exec "${phpcs[@]}" --standard="$core/phpcs.xml.dist" "$@"
+  fi
+  set -- . "$@"
+  PATHS=(.)
 fi
 
 # The paths can belong to several projects, so run each standard in turn and
@@ -54,7 +62,7 @@ for config in "${CONFIGS[@]}"; do
     exec "${phpcs[@]}" --standard="$config" "$@"
   fi
 
-  echo "Checking with $config"
+  echo "Checking with $(shown_path "$config")"
   mapfile -t group < <(paths_of "$config")
   "${phpcs[@]}" --standard="$config" "${FLAGS[@]}" "${group[@]}" || status=$?
 done

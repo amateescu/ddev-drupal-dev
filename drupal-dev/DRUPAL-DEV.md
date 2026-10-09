@@ -58,6 +58,7 @@ ddev phpunit --db=sqlite core/modules/node      # SQLite
 ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (needs ddev-postgres)
 ddev phpunit --db=mariadb core/modules/node     # MariaDB (see .ddev/drupal-dev/docker-compose.mariadb.yaml.example)
 ddev phpunit modules/contrib/token              # contrib module tests
+cd modules/contrib/token && ddev phpunit tests/src/Kernel   # paths relative to where you are
 ```
 
 ## Code quality
@@ -70,8 +71,9 @@ ddev cspell core/modules/node/**       # spell checking (globs)
 ```
 
 Each command uses the configuration of the project being checked, and core's for
-anything that has none. Run any of them without arguments to check the whole
-codebase. `ddev cspell` needs core's node dependencies:
+anything that has none. Run any of them without arguments to check the directory
+you are in, or the whole codebase from the project root. `ddev cspell` needs
+core's node dependencies:
 `ddev exec 'corepack enable && cd core && yarn install'`.
 
 Core's pre-commit script, on your changed files only:
@@ -82,9 +84,9 @@ ddev commit-code-check --cached        # staged files only
 ddev commit-code-check --branch 11.x   # changes compared to a branch
 ```
 
-## Always run tools from the project root
+## Run tools from anywhere in the project
 
-When working on contrib modules, run `ddev phpunit`, `ddev phpcs`, `ddev phpstan`, etc. from the Drupal project root and pass the module path, e.g. `ddev phpcs modules/contrib/dashboard`. Each tool uses the module's own configuration. Without one, a module with a `.gitlab-ci.yml` gets the default configuration contrib CI uses, and anything else gets core's.
+`ddev phpunit`, `ddev phpcs`, `ddev phpstan` and `ddev cspell` take paths relative to the directory you run them from. Run them from the Drupal project root with the module path, e.g. `ddev phpcs modules/contrib/dashboard`, or from inside the module, e.g. `cd modules/contrib/dashboard && ddev phpcs src`. Each tool uses the module's own configuration. Without one, a module with a `.gitlab-ci.yml` gets the default configuration contrib CI uses, and anything else gets core's.
 
 ## Pin core's exact dependency versions
 

@@ -187,6 +187,27 @@ EOF
   assert_failure
   assert_output --partial "no return type specified"
 
+  # Paths are relative to the directory the command runs from, and a run
+  # without paths checks that directory instead of the whole codebase.
+  cd "${TESTDIR}/modules/custom/stantest"
+  run ddev phpstan
+  assert_failure
+  assert_output --partial "no return type specified"
+  run ddev phpcs src
+  assert_failure
+  assert_output --partial "Missing class doc comment"
+  run ddev phpcs
+  assert_failure
+  assert_output --partial "Missing class doc comment"
+
+  # The directory a run without paths checks is not taken for the value of an
+  # option at the end, so the baseline gets its default name.
+  run ddev phpstan --generate-baseline
+  assert_success
+  assert_file_exists "${TESTDIR}/modules/custom/stantest/phpstan-baseline.neon"
+  rm "${TESTDIR}/modules/custom/stantest/phpstan-baseline.neon"
+  cd "${TESTDIR}"
+
   # A project with its own configuration is checked with it, from any path
   # inside the project.
   printf 'parameters:\n  level: 0\n' > "${TESTDIR}/modules/custom/stantest/phpstan.neon"
@@ -222,6 +243,18 @@ EOF
   assert_success
   assert_output --partial "modules/custom/stantest/phpcs.xml"
   assert_output --partial "core/phpcs.xml.dist"
+
+  # From inside a project, the paths in the messages are relative to it.
+  cd "${TESTDIR}/modules/custom/stantest"
+  run ddev phpstan . ../../../core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "Analysing with phpstan.neon"
+  assert_output --partial "Analysing with ../../../core/phpstan-partial.neon"
+  run ddev phpcs . ../../../core/lib/Drupal/Core/Entity/EntityInterface.php
+  assert_success
+  assert_output --partial "Checking with phpcs.xml"
+  assert_output --partial "Checking with ../../../core/phpcs.xml.dist"
+  cd "${TESTDIR}"
 
   # A failing project in a run of several does not go unnoticed.
   mkdir -p "${TESTDIR}/modules/custom/badtest"
@@ -302,6 +335,14 @@ EOF
   run ddev phpstan modules/contrib/contribtest
   assert_failure
   assert_output --partial "might not be defined"
+
+  # The same from inside the project.
+  cd "${project}"
+  run ddev phpstan
+  assert_failure
+  assert_output --partial "might not be defined"
+  cd "${TESTDIR}"
+
   printf 'parameters:\n  ignoreErrors:\n    - identifier: variable.undefined\n' > "${project}/phpstan-baseline.neon"
   run ddev phpstan modules/contrib/contribtest
   assert_success
@@ -328,6 +369,13 @@ EOF
   run ddev phpcs 'modules/custom/nope/*.php'
   assert_failure
   assert_output --partial 'The file "modules/custom/nope/*.php" does not exist'
+
+  # Test paths are relative to the directory the command runs from. The SQLite
+  # database path is relative to the Drupal root, which the test changes to.
+  cd "${TESTDIR}/core/modules/link"
+  run ddev phpunit --db=sqlite tests/src/Kernel/LinkItemTest.php
+  assert_success
+  cd "${TESTDIR}"
 
   # --db flag: SQLite works
   run ddev phpunit --db=sqlite core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
