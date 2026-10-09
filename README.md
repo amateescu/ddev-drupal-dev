@@ -280,6 +280,8 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | `ddev update-module <name>` | Update composer constraint after switching a module's branch |
 | `ddev remove-module <name>` | Remove a previously cloned contrib module |
 
+With DDEV's [shell completion](https://docs.ddev.com/en/stable/users/install/shell-completion/) set up, Tab completes `core` and the cloned modules for `switch` and `mr`, the cloned modules for `update-module` and `remove-module`, a checkout's branches for `switch`, and the `--db` values for `phpunit`.
+
 ## How it works
 
 1. A `composer.local.json` file lives in the core root (ignored via `.gitignore`).

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+# Tab completion for 'ddev phpunit'. Offers the --db values for a word that
+# starts with a dash. Anything else gets no suggestions, so the shell completes
+# file paths the same as without this script.
+
+. "$(dirname "$0")/../../../drupal-dev/completion-helpers.sh"
+
+read_completion_words "$@"
+
+if [[ "$CUR" == -* ]]; then
+  printf '%s\n' --db=mysql --db=mariadb --db=sqlite --db=pgsql
+fi

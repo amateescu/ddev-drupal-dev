@@ -387,6 +387,15 @@ EOF
   assert_success
   assert_output --partial "Using database: mariadb"
 
+  # Tab completion offers the --db values for a flag, and nothing for a path so
+  # the shell completes files
+  run ddev __complete phpunit --d
+  assert_success
+  assert_line -- --db=mariadb
+  run ddev __complete phpunit core/
+  assert_success
+  refute_line --partial -- --db=
+
   # --db flag: unknown value fails with a helpful message
   run ddev phpunit --db=oracle core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_failure
@@ -441,6 +450,28 @@ EOF
   assert_success
   assert_file_exists "${TESTDIR}/modules/contrib/token/token.info.yml"
   assert_git_checkout "${TESTDIR}/modules/contrib/token"
+
+  # Tab completion lists the cloned module and the branches of a checkout
+  run ddev __complete remove-module ''
+  assert_success
+  assert_line token
+  run ddev __complete switch ''
+  assert_success
+  assert_line core
+  assert_line token
+  run ddev __complete switch --pull token ''
+  assert_success
+  assert_line 8.x-1.x
+  run ddev __complete switch core ''
+  assert_success
+  assert_line 11.x
+  # Host completion scripts get no DDEV_APPROOT, so they find the project root
+  # from their own path. Completing from a subdirectory checks that.
+  cd "${TESTDIR}/modules/contrib/token"
+  run ddev __complete mr ''
+  assert_success
+  assert_line token
+  cd "${TESTDIR}"
 
   # The overlay holds user-specific config now, so the generated marker is gone.
   run grep -q "#ddev-generated" "${TESTDIR}/composer.local.json"
@@ -706,6 +737,7 @@ EOF
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/update-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/switch"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/mr"
+  assert_file_not_exists "${TESTDIR}/.ddev/commands/host/autocomplete/switch"
 }
 
 @test "pin-core-lock" {

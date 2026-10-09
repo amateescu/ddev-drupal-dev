@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+# Tab completion for 'ddev switch': the flag, then 'core' or a module, then
+# the branches of that checkout.
+
+. "$(dirname "$0")/../../../drupal-dev/completion-helpers.sh"
+
+read_completion_words "$@"
+
+case ${#POSITIONAL[@]} in
+  0)
+    if [[ "$CUR" == -* ]]; then
+      echo "--pull"
+    else
+      echo "core"
+      list_modules
+    fi
+    ;;
+  1)
+    list_branches "${POSITIONAL[0]}"
+    ;;
+esac
