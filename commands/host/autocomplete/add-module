@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+# Tab completion for 'ddev add-module'. Module names and their branches live on
+# drupal.org, which is too slow to ask on every tab, so only the flag is
+# offered.
+
+. "$(dirname "$0")/../../../drupal-dev/completion-helpers.sh"
+
+read_completion_words "$@"
+
+if [ ${#POSITIONAL[@]} -eq 0 ] && [[ "$CUR" == -* ]]; then
+  echo "--https"
+fi

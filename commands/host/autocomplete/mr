@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+# Tab completion for 'ddev mr': the flag, then 'core' or a module. Merge
+# request numbers come from drupal.org, so they are not offered.
+
+. "$(dirname "$0")/../../../drupal-dev/completion-helpers.sh"
+
+read_completion_words "$@"
+
+if [ ${#POSITIONAL[@]} -eq 0 ]; then
+  if [[ "$CUR" == -* ]]; then
+    echo "--https"
+  else
+    echo "core"
+    list_modules
+  fi
+fi
