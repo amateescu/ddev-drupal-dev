@@ -77,10 +77,28 @@ split_args() {
   done
 }
 
-# Echoes the configuration file that covers a path: the nearest file with one of
-# the given names in the path itself or a parent directory, up to the project
-# root. This is how the code quality tools find a configuration when contrib CI
-# runs them from a project directory. Echoes nothing when there is none.
+# Succeeds when the command runs from the project root. The commands run from
+# the directory they were started from on the host, which can be anywhere in
+# the project.
+at_project_root() {
+  [ . -ef "$DDEV_APPROOT" ]
+}
+
+# Echoes a path for a message. A path in the project is shown relative to the
+# current directory, the same way the paths on the command line are given.
+#   echo "Checking with $(shown_path "$config")"
+shown_path() {
+  case "$1" in
+    "$DDEV_APPROOT"/*) realpath -sm --relative-to=. "$1" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# Echoes the configuration file that covers a path, as an absolute path: the
+# nearest file with one of the given names in the path itself or a parent
+# directory, up to the project root. This is how the code quality tools find a
+# configuration when contrib CI runs them from a project directory. Echoes
+# nothing when there is none.
 #   config_for modules/contrib/token phpstan.neon phpstan.neon.dist
 config_for() {
   local dir="$1" name
@@ -89,9 +107,10 @@ config_for() {
   [ -d "$dir" ] || dir=$(dirname "$dir")
 
   # Spell the directory the same way whichever way the path was given, so that
-  # paths from one project end up in one group. Lexical only, so that a
-  # symlinked directory keeps the parents it was reached through.
-  dir=$(realpath -sm --relative-to="${DDEV_APPROOT:-$PWD}" "$dir")
+  # paths from one project end up in one group. Absolute, so the result works
+  # from any directory. Lexical only, so that a symlinked directory keeps the
+  # parents it was reached through.
+  dir=$(realpath -sm "$dir")
 
   while :; do
     for name in "$@"; do
@@ -101,16 +120,16 @@ config_for() {
       fi
     done
     case "$dir" in
-      . | /) return ;;
+      "$DDEV_APPROOT" | /) return ;;
     esac
     dir=$(dirname "$dir")
   done
 }
 
-# Echoes the directory of the contrib project a path belongs to: the nearest
-# directory with a .gitlab-ci.yml. A .gitlab-ci.yml in the project root or the
-# docroot belongs to core or the site, not to a contrib project. Echoes nothing
-# when the path belongs to no contrib project.
+# Echoes the directory of the contrib project a path belongs to, as an absolute
+# path: the nearest directory with a .gitlab-ci.yml. A .gitlab-ci.yml in the
+# project root or the docroot belongs to core or the site, not to a contrib
+# project. Echoes nothing when the path belongs to no contrib project.
 #   contrib_project modules/contrib/token/src
 contrib_project() {
   local ci dir docroot
@@ -119,9 +138,9 @@ contrib_project() {
   dir=$(dirname "$ci")
 
   # The docroot spelled the way config_for spells directories.
-  docroot=$(realpath -sm --relative-to="${DDEV_APPROOT:-$PWD}" "${DDEV_APPROOT:-$PWD}/${DDEV_DOCROOT:-}")
+  docroot=$(realpath -sm "$DDEV_APPROOT/${DDEV_DOCROOT:-}")
   case "$dir" in
-    . | "$docroot") ;;
+    "$DDEV_APPROOT" | "$docroot") ;;
     *) echo "$dir" ;;
   esac
 }

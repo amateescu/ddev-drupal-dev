@@ -165,6 +165,13 @@ ddev phpunit --db=mariadb core/modules/node     # MariaDB
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
+Test paths are relative to the directory you run the command from, so inside a module you can leave out the module's own path:
+
+```bash
+cd modules/contrib/token
+ddev phpunit tests/src/Kernel
+```
+
 For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgres) add-on first.
 
 For MariaDB on a project whose database is MySQL, add a second database container from the example the add-on installs, then set its image tag to the MariaDB version you want to test:
@@ -183,16 +190,24 @@ PHPStan, PHP CodeSniffer and cspell run with the configuration of the project be
 ```bash
 ddev phpstan core/modules/node         # PHPStan on specific paths
 ddev phpstan modules/contrib/token     # the module's own configuration, if it has one
-ddev phpstan                           # full analysis with core's baseline
+ddev phpstan                           # full analysis with core's baseline, from the project root
 ddev phpcs core/modules/node           # coding standard checks
-ddev phpcs                             # whole codebase
+ddev phpcs                             # whole codebase, from the project root
 ddev cspell core/modules/node/**       # spell checking (globs)
-ddev cspell                            # whole codebase
+ddev cspell                            # whole codebase, from the project root
 ```
 
 `ddev cspell` needs core's node dependencies: `ddev exec 'corepack enable && cd core && yarn install'`.
 
-Paths and globs are relative to the project root. Each command takes the nearest configuration in the checked path or a parent directory, the same way contrib CI picks one up: `phpstan.neon`, `phpstan.neon.dist` or `phpstan.dist.neon` for PHPStan, `.phpcs.xml`, `phpcs.xml`, `.phpcs.xml.dist` or `phpcs.xml.dist` for PHP CodeSniffer, and `.cspell.json`, `cspell.json` or any of the other names cspell itself looks for. Paths belonging to several projects are checked one project at a time.
+Paths and globs are relative to the directory you run the command from. Without any, a command checks that directory, and from the project root that is the whole codebase:
+
+```bash
+cd modules/contrib/token
+ddev phpstan                           # the module
+ddev phpcs src                         # the module's src directory
+```
+
+Each command takes the nearest configuration in the checked path or a parent directory, the same way contrib CI picks one up: `phpstan.neon`, `phpstan.neon.dist` or `phpstan.dist.neon` for PHPStan, `.phpcs.xml`, `phpcs.xml`, `.phpcs.xml.dist` or `phpcs.xml.dist` for PHP CodeSniffer, and `.cspell.json`, `cspell.json` or any of the other names cspell itself looks for. Paths belonging to several projects are checked one project at a time.
 
 A contrib project (one with a `.gitlab-ci.yml`) is checked the way contrib CI checks it:
 

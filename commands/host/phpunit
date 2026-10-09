@@ -7,6 +7,12 @@
 
 set -e
 
+# Git Bash on Windows rewrites arguments that look like absolute paths before
+# they reach ddev, so /var/www/html would turn into a path under the Git install
+# directory. The container paths below must reach ddev as they are. Other shells
+# ignore this variable.
+export MSYS_NO_PATHCONV=1
+
 # Parse our flags, pass everything else through to PHPUnit.
 args=()
 for arg in "$@"; do
@@ -68,12 +74,24 @@ ddev exec -- bash >/dev/null 2>&1 << 'SCRIPT' || true
       done
 SCRIPT
 
+# Run PHPUnit in the container directory that matches the host directory the
+# command was started from, so test paths are relative to it. 'ddev exec' runs
+# from the project root otherwise. pwd -P resolves symlinks in both directories,
+# so a directory inside the project starts with the project root.
+container_root=/var/www/html
+dir="$container_root"
+here=$(pwd -P)
+approot=$(cd "$DDEV_APPROOT" && pwd -P)
+case "$here/" in
+  "$approot"/*) dir="$container_root${here#"$approot"}" ;;
+esac
+
 # Only override SIMPLETEST_DB when --db was specified; otherwise the container
 # default applies.
-cmd=(phpunit -c "${DDEV_DOCROOT:+$DDEV_DOCROOT/}core" "${args[@]}")
+cmd=(phpunit -c "$container_root/${DDEV_DOCROOT:+$DDEV_DOCROOT/}core" "${args[@]}")
 [ -n "$DB" ] && cmd=(env "SIMPLETEST_DB=$SIMPLETEST_DB" "${cmd[@]}")
 # --raw runs the command directly. Without it ddev joins the arguments with
 # spaces and runs the result through a shell in the container, which splits
 # them again and treats metacharacters as syntax: --filter 'testFoo|testBar'
 # turns into a pipe.
-ddev exec --raw -- "${cmd[@]}"
+ddev exec --raw --dir "$dir" -- "${cmd[@]}"

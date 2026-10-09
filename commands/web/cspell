@@ -3,25 +3,28 @@
 #ddev-generated
 ## Description: Run cspell with the configuration of the project being checked
 ## Usage: cspell [flags] [globs]
-## Example: "ddev cspell core/modules/node/**", "ddev cspell modules/contrib/token/**" or "ddev cspell" for the whole codebase
+## Example: "ddev cspell core/modules/node/**", "ddev cspell modules/contrib/token/**" or "ddev cspell" for the current directory
 ## ExecRaw: true
+## HostWorkingDir: true
 
 # ExecRaw keeps the arguments as they came in; without it ddev joins them and a
 # shell in the container splits them again, turning a path with a space into two.
+# HostWorkingDir runs the command in the directory it was started from on the
+# host, so globs are relative to that directory.
 
 . /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
 
-root="${DDEV_DOCROOT:+$DDEV_DOCROOT/}"
+root="$DDEV_APPROOT/${DDEV_DOCROOT:+$DDEV_DOCROOT/}"
 core="${root}core"
 
 if [ ! -x "$core/node_modules/.bin/cspell" ]; then
   echo "cspell is not installed. Install core's node dependencies first:" >&2
-  echo "  ddev exec 'corepack enable && cd $core && yarn install'" >&2
+  echo "  ddev exec 'corepack enable && cd ${core#"$DDEV_APPROOT/"} && yarn install'" >&2
   exit 1
 fi
 
-# The project root is the cspell root, so globs are project-root-relative, the
-# same base the other code quality commands take their paths from.
+# The current directory is the cspell root, so globs are relative to it, the same
+# as the paths the other code quality commands take.
 cspell=("$core/node_modules/.bin/cspell" --root .)
 
 # Core's check is the big one, so it keeps a cache. The cache belongs to core's
@@ -134,13 +137,20 @@ contrib_config() {
 
 split_args "-c|-e|-r|--cache-location|--cache-strategy|--config|--dictionary|--disable-dictionary|--exclude|--file-list|--gitignore-root|--issue-template|--language-id|--locale|--report|--reporter|--root|--stop-config-search-at" "$@"
 
-# A run without globs checks core, over the same globs core checks in CI. A file
-# list names the files itself, so it gets no globs added.
+# A file list names the files itself, so it gets no globs added. Otherwise a run
+# without globs checks the directory it was started from. From the project root
+# that is core, over the same globs core checks in CI.
 if [ "${#PATHS[@]}" -eq 0 ]; then
   globs=("$core/**/*" "${root}composer/**/*" "${root}composer.json" "${root}.gitlab-ci/*" "${root}.gitlab-ci.yml")
   [ "$OPERANDS" -eq 0 ] || globs=()
   case " ${FLAGS[*]} " in *" --file-list"*) globs=() ;; esac
-  exec "${cspell[@]}" -c "$core/.cspell.json" "${core_cache[@]}" "$@" "${globs[@]}"
+  if [ "${#globs[@]}" -eq 0 ] || at_project_root; then
+    exec "${cspell[@]}" -c "$core/.cspell.json" "${core_cache[@]}" "$@" "${globs[@]}"
+  fi
+  # The path goes first, so an option at the end that takes an optional value
+  # does not take the path for its value.
+  set -- . "$@"
+  PATHS=(.)
 fi
 
 generated=()
@@ -168,7 +178,7 @@ for key in "${CONFIGS[@]}"; do
   if [ "${#CONFIGS[@]}" -eq 1 ]; then
     args=("$@")
   else
-    [ -z "$project" ] && echo "Checking with $config" || echo "Checking $project with $config, plus what contrib CI adds"
+    [ -z "$project" ] && echo "Checking with $(shown_path "$config")" || echo "Checking $(shown_path "$project") with $(shown_path "$config"), plus what contrib CI adds"
     mapfile -t group < <(paths_of "$key")
     args=("${FLAGS[@]}" "${group[@]}")
   fi
