@@ -35,6 +35,7 @@ setup_file() {
   export TESTDIR="$(mktemp -d "${HOME}/tmp/${PROJNAME}.XXXXXX")"
   export DDEV_NONINTERACTIVE=true
   export DDEV_NO_INSTRUMENTATION=true
+  export CI=true
 
   # Ignore Composer security advisories in tests
   export COMPOSER_NO_SECURITY_BLOCKING=1

@@ -19,7 +19,7 @@ on:
     inputs:
       debug_enabled:
         type: boolean
-        description: Debug with tmate
+        description: Enable remote debugging session
         required: false
         default: false
 
@@ -37,6 +37,7 @@ jobs:
     name: tests (${{ matrix.ddev_version }}, ${{ matrix.group }})
     strategy:
       matrix:
+        os: [ubuntu-latest]
         # Pull requests run against DDEV stable only. The nightly run and pushes
         # to main also run against DDEV HEAD, to catch DDEV changes that break
         # the add-on.
@@ -52,7 +53,7 @@ jobs:
             filter: modules
       fail-fast: false
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: ddev/github-action-add-on-test@v2
