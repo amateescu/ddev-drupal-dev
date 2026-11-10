@@ -1,0 +1,42 @@
+#ddev-generated
+# A second database container for running tests on PostgreSQL with
+# `ddev phpunit --db=pgsql` when the project database is MySQL or MariaDB. Its
+# data is in memory, so tests run faster and the data is gone on every
+# restart.
+#
+# To use it, copy it next to the other compose files without this file's
+# generated marker, set the image tag to the PostgreSQL version you want to
+# test, and restart:
+#
+#   sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.postgres.yaml.example > .ddev/docker-compose.postgres.yaml
+#   ddev restart
+#
+# Drupal 11 needs at least PostgreSQL 16. Memory use is capped by the tmpfs
+# size below; raise it if a large run fills it.
+services:
+  postgres:
+    container_name: ddev-${DDEV_SITENAME}-postgres
+    image: postgres:16
+    restart: "no"
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    # PGDATA is set because PostgreSQL 18 images default to a different
+    # directory.
+    environment:
+      - POSTGRES_USER=db
+      - POSTGRES_PASSWORD=db
+      - POSTGRES_DB=db
+      - PGDATA=/var/lib/postgresql/data
+    expose:
+      - "5432"
+    tmpfs:
+      - /var/lib/postgresql/data:size=1g
+    # Lets `ddev start` wait until the server accepts connections. It goes over
+    # TCP because the image's setup server only listens on the socket.
+    healthcheck:
+      test: ["CMD", "pg_isready", "-q", "-h", "127.0.0.1", "-U", "db", "-d", "db"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

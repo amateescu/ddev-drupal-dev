@@ -53,9 +53,12 @@ The overlay lives in `composer.local.json`; core's `composer.json` and `composer
 
 ```bash
 ddev phpunit core/modules/node                  # project database (default)
-ddev phpunit --db=sqlite core/modules/node      # SQLite
-ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (needs ddev-postgres)
+ddev phpunit --db=sqlite core/modules/node      # SQLite, in memory
+ddev phpunit --db=pgsql core/modules/node       # PostgreSQL (see .ddev/drupal-dev/docker-compose.postgres.yaml.example)
 ddev phpunit --db=mariadb core/modules/node     # MariaDB (see .ddev/drupal-dev/docker-compose.mariadb.yaml.example)
+ddev phpunit --db=mysql core/modules/node       # MySQL (see .ddev/drupal-dev/docker-compose.mysql.yaml.example)
+ddev phpunit --memory core/modules/node         # in memory, needs testdb: ddev start --profiles=testdb
+ddev phpunit --no-memory core/modules/node      # the project database, while testdb runs
 ddev phpunit modules/contrib/token              # contrib module tests
 cd modules/contrib/token && ddev phpunit tests/src/Kernel   # paths relative to where you are
 ```

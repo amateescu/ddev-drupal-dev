@@ -1,0 +1,10 @@
+#ddev-generated
+# An in-memory directory for the SQLite database of `ddev phpunit --db=sqlite`.
+# Table creation and drops are most of a kernel test's run time, and on tmpfs
+# they don't wait for the disk. The web server and the CLI share the web
+# container, so functional tests see the same file. The directory is empty
+# after every restart, and uses memory only for what is stored in it.
+services:
+  web:
+    tmpfs:
+      - /mnt/test-db:size=256m,mode=1777

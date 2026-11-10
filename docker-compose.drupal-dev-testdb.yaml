@@ -1,0 +1,72 @@
+#ddev-generated
+# A second database container with its data in memory, for `ddev phpunit`. It
+# runs the same database server as the project database, which stays on disk.
+# For MySQL and MariaDB it also reads the same .ddev/mysql configuration.
+# Kernel and functional tests spend most of their time creating and dropping
+# tables, and on tmpfs those statements don't wait for the disk.
+#
+# It is behind the testdb profile, so it only runs when asked for. While it
+# runs, `ddev phpunit` uses it by default. To keep it on for this project:
+#
+#   ddev dotenv set .ddev/.env --compose-profiles=testdb && ddev restart
+#
+# To start it until the next restart, without restarting anything else:
+#
+#   ddev start --profiles=testdb
+#
+# The data is gone on every restart, and the server sets up an empty data
+# directory each time it starts, which takes a few seconds. Memory use is capped
+# by the tmpfs size below.
+services:
+  testdb:
+    profiles:
+      - testdb
+    container_name: ddev-${DDEV_SITENAME}-testdb
+    # The image the project's db container is built from. For MySQL and
+    # MariaDB that is DDEV's image, which brings its own healthcheck and the
+    # db/db credentials, and has the binary log off. For PostgreSQL it is the
+    # official image, which runs on its default configuration here.
+    image: ${DDEV_DBIMAGE}
+    # DDEV's images don't start as root. DDEV runs them as the host user too.
+    user: "${DDEV_UID}:${DDEV_GID}"
+    # PostgreSQL starts with the official image's entrypoint. On an empty data
+    # directory DDEV's MySQL and MariaDB image unpacks its base database into
+    # /var/tmp/base_db and copies it in from there. That directory survives a
+    # stop and the data directory doesn't, so starting the same container
+    # again (after a reboot or a Docker restart) fails on the leftover files.
+    # Clearing it first makes every start a fresh one.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - if command -v postgres >/dev/null; then exec docker-entrypoint.sh postgres; fi; rm -rf /var/tmp/base_db && exec /docker-entrypoint.sh
+    restart: "no"
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    # Read by the official PostgreSQL image only. PGDATA is set because
+    # PostgreSQL 18 images default to a different directory.
+    environment:
+      - POSTGRES_USER=db
+      - POSTGRES_PASSWORD=db
+      - POSTGRES_DB=db
+      - PGDATA=/var/lib/postgresql/data
+    expose:
+      - "3306"
+      - "5432"
+    # Only the data directory of the server that runs gets used.
+    tmpfs:
+      - /var/lib/mysql:size=1g,uid=${DDEV_UID},gid=${DDEV_GID}
+      - /var/lib/postgresql/data:size=1g,uid=${DDEV_UID},gid=${DDEV_GID}
+    volumes:
+      - .:/mnt/ddev_config:ro
+    # A healthcheck here replaces the one in DDEV's image, so this runs that
+    # image's /healthcheck.sh with the same timing, plus the start period
+    # DDEV gives its own db service for a slow first start. The official PostgreSQL
+    # image doesn't have one. pg_isready goes over TCP because the setup
+    # server the image starts first only listens on the socket.
+    healthcheck:
+      test: ["CMD-SHELL", "if command -v pg_isready >/dev/null; then pg_isready -q -h 127.0.0.1 -U db -d db; else /healthcheck.sh; fi"]
+      interval: 1s
+      timeout: 120s
+      retries: 30
+      start_period: 120s

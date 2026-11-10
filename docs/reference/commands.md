@@ -82,19 +82,23 @@ Removes the Composer requirement and the path repository, then deletes the modul
 ## `ddev phpunit`
 
 ```
-ddev phpunit [--db=mysql|mariadb|sqlite|pgsql] [phpunit arguments]
+ddev phpunit [--db=mysql|mariadb|sqlite|pgsql] [--memory|--no-memory] [phpunit arguments]
 ```
 
-Runs PHPUnit with core's configuration, from the container directory that matches the one you run it from. All arguments except `--db` go to PHPUnit unchanged.
+Runs PHPUnit with core's configuration, from the container directory that matches the one you run it from. All arguments except `--db`, `--memory` and `--no-memory` go to PHPUnit unchanged.
 
 | Option | Description |
 | ------ | ----------- |
-| `--db=mysql` | The project's `db` container. This is the default. |
+| `--db=mysql` | The project database if it is MySQL, otherwise a separate MySQL container. |
 | `--db=mariadb` | The project database if it is MariaDB, otherwise a separate MariaDB container. |
-| `--db=sqlite` | A SQLite database file. |
-| `--db=pgsql` | The project database if it is PostgreSQL, otherwise the container from the ddev-postgres add-on. |
+| `--db=sqlite` | A SQLite database file in memory, in the web container's `/mnt/test-db`. |
+| `--db=pgsql` | The project database if it is PostgreSQL, otherwise a separate PostgreSQL container. |
+| `--memory` | The testdb container, which keeps its data in memory, for the project's database type. Fails with how to start it when it isn't running. With `--db` for another database type, the separate container for that type, which has to keep its data in memory. |
+| `--no-memory` | The project database, or for SQLite a file in `sites/default/files`, even while testdb runs. |
 
-See [Running tests](../guides/testing.md).
+While testdb runs, it is the default for runs without `--db` and for `--db` with the project's own database type. It runs only when its `testdb` Compose profile is on.
+
+See [Running tests](../guides/testing.md) and [Faster runs: database in memory](../guides/testing.md#faster-runs-database-in-memory).
 
 ## `ddev phpstan`
 

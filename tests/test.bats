@@ -94,6 +94,18 @@ reset_project() {
     assert_success
   fi
 
+  # A running testdb container makes it the default for 'ddev phpunit', so it
+  # goes away after the test that starts it, even when that test fails.
+  docker rm -f "ddev-${PROJNAME}-testdb" >/dev/null 2>&1 || true
+
+  # The SQLite file a failed --no-memory run can leave behind, and the
+  # postgres example that "install from directory" turns on.
+  rm -f sites/default/files/db.sqlite
+  if [ -f .ddev/docker-compose.postgres.yaml ]; then
+    rm .ddev/docker-compose.postgres.yaml
+    docker rm -f "ddev-${PROJNAME}-postgres" >/dev/null 2>&1 || true
+  fi
+
   # Restore core's tracked files and remove everything under modules/, where
   # tests put their modules and clones. The project root is not cleaned,
   # because without the add-on's .gitignore that would delete .ddev and vendor
@@ -120,6 +132,22 @@ assert_git_checkout() {
   run git -C "${dir}" remote get-url origin
   assert_success
   assert_output --partial "https://git.drupalcode.org"
+}
+
+# Print how many tables a database container has created since it started.
+# Usage: created_tables <db|testdb>.
+created_tables() {
+  docker exec "ddev-${PROJNAME}-$1" mariadb -uroot -proot -N -e "SHOW GLOBAL STATUS LIKE 'Com_create_table'" | cut -f2
+}
+
+# Wait until Docker reports a container as healthy, for up to a minute.
+# Usage: wait_healthy <container>.
+wait_healthy() {
+  for _ in $(seq 1 60); do
+    [ "$(docker inspect -f '{{.State.Health.Status}}' "$1")" = healthy ] && return 0
+    sleep 1
+  done
+  return 1
 }
 
 # Print the locked version of a package, looking in both the prod and dev
@@ -156,6 +184,7 @@ health_checks() {
   # Verify the MariaDB compose example is installed but not active
   assert_file_exists "${TESTDIR}/.ddev/drupal-dev/docker-compose.mariadb.yaml.example"
   assert_file_not_exists "${TESTDIR}/.ddev/docker-compose.mariadb.yaml"
+  assert_file_exists "${TESTDIR}/.ddev/drupal-dev/docker-compose.postgres.yaml.example"
 
   # Verify the cheat sheet was copied and is gitignored
   assert_file_exists "${TESTDIR}/DRUPAL-DEV.md"
@@ -426,8 +455,7 @@ EOF
   assert_failure
   assert_output --partial 'The file "modules/custom/nope/*.php" does not exist'
 
-  # Test paths are relative to the directory the command runs from. The SQLite
-  # database path is relative to the Drupal root, which the test changes to.
+  # Test paths are relative to the directory the command runs from.
   cd "${TESTDIR}/core/modules/link"
   run ddev phpunit --db=sqlite tests/src/Kernel/LinkItemTest.php
   assert_success
@@ -437,17 +465,120 @@ EOF
   run ddev phpunit --db=sqlite core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
   assert_success
 
+  # SQLite is in memory by default: the database file goes on the web container's
+  # tmpfs mount, not under sites/default/files.
+  run ddev phpunit --db=sqlite --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: sqlite (in memory)"
+  run ddev exec test -f /mnt/test-db/db.sqlite
+  assert_success
+  assert_file_not_exists "${TESTDIR}/sites/default/files/db.sqlite"
+
   # --db flag: MariaDB uses the project database, DDEV's default. A Kernel test
   # so the run actually connects to it.
   run ddev phpunit --db=mariadb --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
   assert_success
   assert_output --partial "Using database: mariadb"
 
-  # Tab completion offers the --db values for a flag, and nothing for a path so
-  # the shell completes files
+  # The testdb container is behind a compose profile that is off, so --memory
+  # says how to turn it on, keeping any profiles the project already has.
+  run ddev phpunit --memory core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
+  assert_failure
+  assert_output --partial "ddev dotenv set .ddev/.env --compose-profiles=testdb && ddev restart"
+  assert_output --partial "ddev start --profiles=testdb"
+  printf 'COMPOSE_PROFILES=other\n' >> .ddev/.env
+  run ddev phpunit --memory core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
+  sed -i '/^COMPOSE_PROFILES=other$/d' .ddev/.env
+  assert_failure
+  assert_output --partial "--compose-profiles=other,testdb"
+
+  # Starting the profile on the running project starts only testdb.
+  web_started="$(docker inspect -f '{{.State.StartedAt}}' "ddev-${PROJNAME}-web")"
+  run ddev start -y --profiles=testdb
+  assert_success
+  [ "$(docker inspect -f '{{.State.StartedAt}}' "ddev-${PROJNAME}-web")" = "${web_started}" ]
+
+  # --memory uses testdb. It runs the project's database type, MariaDB here.
+  # The count of created tables shows which server the test used.
+  db_tables_before="$(created_tables db)"
+  run ddev phpunit --memory --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: mariadb (in memory)"
+  [ "$(created_tables db)" = "${db_tables_before}" ]
+  [ "$(created_tables testdb)" -gt 0 ]
+
+  # While testdb runs it is the default, and --no-memory goes back to the
+  # project database.
+  testdb_tables_before="$(created_tables testdb)"
+  run ddev phpunit --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: mariadb (in memory)"
+  [ "$(created_tables testdb)" -gt "${testdb_tables_before}" ]
+  run ddev phpunit --no-memory --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  refute_output --partial "in memory"
+  [ "$(created_tables db)" -gt "${db_tables_before}" ]
+
+  # The site under a functional test reaches the same in-memory database.
+  run ddev phpunit --filter=testDrupalSettings core/tests/Drupal/FunctionalTests/BrowserTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: mariadb (in memory)"
+
+  # Starting the same container again, which a reboot does, gives a working
+  # server on an empty data directory.
+  docker stop "ddev-${PROJNAME}-testdb" >/dev/null
+  docker start "ddev-${PROJNAME}-testdb" >/dev/null
+  wait_healthy "ddev-${PROJNAME}-testdb"
+  run ddev phpunit --memory --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+
+  # --no-memory puts SQLite back in the files directory.
+  run ddev phpunit --no-memory --db=sqlite --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  refute_output --partial "in memory"
+  assert_file_exists "${TESTDIR}/sites/default/files/db.sqlite"
+  rm -f "${TESTDIR}/sites/default/files/db.sqlite"
+
+  docker rm -f "ddev-${PROJNAME}-testdb" >/dev/null
+
+  # MySQL on a MariaDB project needs the separate mysql container, with or
+  # without --memory, and says where to find it. PostgreSQL needs a postgres
+  # container in this project, which doesn't have one yet.
+  run ddev phpunit --db=mysql core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
+  assert_failure
+  assert_output --partial "docker-compose.mysql.yaml.example"
+  run ddev phpunit --memory --db=mysql core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
+  assert_failure
+  assert_output --partial "docker-compose.mysql.yaml.example"
+  run ddev phpunit --db=pgsql core/tests/Drupal/Tests/Core/Access/AccessGroupAndTest.php
+  assert_failure
+  assert_output --partial "PostgreSQL is not available"
+
+  # The postgres example adds that container, with its data in memory.
+  # 'ddev start' on the running project starts only the new service.
+  sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.postgres.yaml.example > .ddev/docker-compose.postgres.yaml
+  web_started="$(docker inspect -f '{{.State.StartedAt}}' "ddev-${PROJNAME}-web")"
+  run ddev start -y
+  assert_success
+  [ "$(docker inspect -f '{{.State.StartedAt}}' "ddev-${PROJNAME}-web")" = "${web_started}" ]
+  run ddev phpunit --memory --db=pgsql --filter=testSetUp core/tests/Drupal/KernelTests/KernelTestBaseTest.php
+  assert_success
+  assert_output --partial "Using database: pgsql (in memory)"
+  assert_output --partial "OK ("
+  rm .ddev/docker-compose.postgres.yaml
+  docker rm -f "ddev-${PROJNAME}-postgres" >/dev/null
+
+  # Tab completion offers the --db values, --memory and --no-memory for a flag,
+  # and nothing for a path so the shell completes files
   run ddev __complete phpunit --d
   assert_success
   assert_line -- --db=mariadb
+  run ddev __complete phpunit --m
+  assert_success
+  assert_line -- --memory
+  run ddev __complete phpunit --n
+  assert_success
+  assert_line -- --no-memory
   run ddev __complete phpunit core/
   assert_success
   refute_line --partial -- --db=
@@ -930,6 +1061,8 @@ json.dump(d, open(p, 'w'), indent=4)
   assert_file_not_exists "${TESTDIR}/DRUPAL-DEV.md"
   assert_file_not_exists "${TESTDIR}/.ddev/drupal-dev"
   assert_file_not_exists "${TESTDIR}/.ddev/config.drupal-dev.yaml"
+  assert_file_not_exists "${TESTDIR}/.ddev/docker-compose.drupal-dev-sqlite.yaml"
+  assert_file_not_exists "${TESTDIR}/.ddev/docker-compose.drupal-dev-testdb.yaml"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/phpunit"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/add-module"
   assert_file_not_exists "${TESTDIR}/.ddev/commands/host/remove-module"
