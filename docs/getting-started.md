@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- [DDEV](https://docs.ddev.com/en/stable/users/install/) 1.25.3 or newer.
+- [DDEV](https://docs.ddev.com/en/stable/users/install/) 1.25.5 or newer.
 - Git on the host. Module clones and merge request checkouts run on the host and use your host SSH keys.
 - An SSH key on your drupal.org account if you want to push. Without one, use the `--https` option of [`ddev add-module`](reference/commands.md#ddev-add-module) and [`ddev mr`](reference/commands.md#ddev-mr) to get read-only remotes.
 

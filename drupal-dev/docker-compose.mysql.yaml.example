@@ -1,0 +1,43 @@
+#ddev-generated
+# A second database container for running tests on MySQL with
+# `ddev phpunit --db=mysql` when the project database is MariaDB or
+# PostgreSQL. Its data is in memory, so tests run faster and the data is gone
+# on every restart.
+#
+# To use it, copy it next to the other compose files without this file's
+# generated marker, set the image tag to the MySQL version you want to test,
+# and restart:
+#
+#   sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.mysql.yaml.example > .ddev/docker-compose.mysql.yaml
+#   ddev restart
+#
+# Drupal 11 needs at least MySQL 8.0. Memory use is capped by the tmpfs size
+# below; raise it if a large run fills it.
+services:
+  mysql:
+    container_name: ddev-${DDEV_SITENAME}-mysql
+    image: mysql:8.0
+    # The binary log is on by default in MySQL 8. It lives in the data
+    # directory, so on tmpfs it would grow in memory.
+    command: --skip-log-bin
+    restart: "no"
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME}
+      com.ddev.approot: ${DDEV_APPROOT}
+    environment:
+      - MYSQL_USER=db
+      - MYSQL_PASSWORD=db
+      - MYSQL_DATABASE=db
+      - MYSQL_ROOT_PASSWORD=root
+    expose:
+      - "3306"
+    tmpfs:
+      - /var/lib/mysql:size=1g
+    # Lets `ddev start` wait until the server accepts connections. It goes over
+    # TCP because the image's setup server only listens on the socket.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

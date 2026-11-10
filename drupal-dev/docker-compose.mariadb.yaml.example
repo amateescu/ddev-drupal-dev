@@ -1,6 +1,8 @@
 #ddev-generated
 # A second database container for running tests on MariaDB with
-# `ddev phpunit --db=mariadb` when the project database is MySQL.
+# `ddev phpunit --db=mariadb` when the project database is MySQL or
+# PostgreSQL. Its data is in memory, so tests run faster and the data is gone
+# on every restart.
 #
 # To use it, copy it next to the other compose files without this file's
 # generated marker, set the image tag to the MariaDB version you want to test,
@@ -9,14 +11,15 @@
 #   sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.mariadb.yaml.example > .ddev/docker-compose.mariadb.yaml
 #   ddev restart
 #
-# Drupal 11 needs at least MariaDB 10.6, Drupal 12 at least 10.11. The volume
-# only holds test data. A newer image upgrades it on start, but an older one
-# cannot read it, so before you switch to an older version run `ddev stop` and
-# `docker volume rm ddev-<project>_mariadb-data`.
+# Drupal 11 needs at least MariaDB 10.6, Drupal 12 at least 10.11. Memory use is
+# capped by the tmpfs size below; raise it if a large run fills it.
 services:
   mariadb:
     container_name: ddev-${DDEV_SITENAME}-mariadb
     image: mariadb:10.11
+    # The binary log is off by default in MariaDB. This keeps it off, since on
+    # tmpfs it would grow in memory.
+    command: --skip-log-bin
     restart: "no"
     labels:
       com.ddev.site-name: ${DDEV_SITENAME}
@@ -26,17 +29,14 @@ services:
       - MARIADB_PASSWORD=db
       - MARIADB_DATABASE=db
       - MARIADB_ROOT_PASSWORD=root
-      - MARIADB_AUTO_UPGRADE=1
     expose:
       - "3306"
-    volumes:
-      - mariadb-data:/var/lib/mysql
+    tmpfs:
+      - /var/lib/mysql:size=1g
     # Lets `ddev start` wait until the server accepts connections.
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
+      interval: 2s
       timeout: 5s
       retries: 5
-
-volumes:
-  mariadb-data:
+      start_period: 30s

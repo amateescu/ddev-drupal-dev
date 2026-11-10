@@ -1,6 +1,6 @@
 name: drupal-dev
 
-ddev_version_constraint: '>= v1.25.3'
+ddev_version_constraint: '>= v1.25.5'
 
 project_files:
   - drupal-dev/composer.local.json
@@ -16,6 +16,8 @@ project_files:
   - drupal-dev/phpstan.contrib.neon
   - drupal-dev/cspell.contrib.json
   - drupal-dev/docker-compose.mariadb.yaml.example
+  - drupal-dev/docker-compose.mysql.yaml.example
+  - drupal-dev/docker-compose.postgres.yaml.example
   - commands/host/phpunit
   - commands/host/add-module
   - commands/host/update-module
@@ -33,6 +35,8 @@ project_files:
   - commands/web/cspell
   - commands/web/commit-code-check
   - docker-compose.drupal-dev-selenium.yaml
+  - docker-compose.drupal-dev-sqlite.yaml
+  - docker-compose.drupal-dev-testdb.yaml
   - config.drupal-dev.yaml
 
 post_install_actions:

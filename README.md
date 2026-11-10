@@ -161,9 +161,10 @@ Tests run against your project's configured database by default. Use `--db` to s
 
 ```bash
 ddev phpunit core/modules/node                  # project database (default)
-ddev phpunit --db=sqlite core/modules/node      # SQLite
+ddev phpunit --db=sqlite core/modules/node      # SQLite, in memory
 ddev phpunit --db=pgsql core/modules/node       # PostgreSQL
 ddev phpunit --db=mariadb core/modules/node     # MariaDB
+ddev phpunit --memory core/modules/node         # project database type, in memory (needs the testdb profile)
 ddev phpunit modules/contrib/token              # contrib module tests
 ```
 
@@ -174,16 +175,29 @@ cd modules/contrib/token
 ddev phpunit tests/src/Kernel
 ```
 
-For PostgreSQL, install the [ddev-postgres](https://github.com/ddev/ddev-postgres) add-on first.
-
-For MariaDB on a project whose database is MySQL, add a second database container from the example the add-on installs, then set its image tag to the MariaDB version you want to test:
+For MariaDB on a project whose database is MySQL or PostgreSQL, add a second database container from the example the add-on installs, then set its image tag to the MariaDB version you want to test:
 
 ```bash
 sed '/^#ddev-generated$/d' .ddev/drupal-dev/docker-compose.mariadb.yaml.example > .ddev/docker-compose.mariadb.yaml
 ddev restart
 ```
 
-On a project whose database is MariaDB, `--db=mariadb` uses the project database and needs no extra container.
+On a project whose database is MariaDB, `--db=mariadb` uses the project database and needs no extra container. The separate MariaDB container keeps its data in memory; a copy made before that change keeps it on disk until you copy the example again.
+
+For MySQL on a project whose database is MariaDB or PostgreSQL, do the same with `.ddev/drupal-dev/docker-compose.mysql.yaml.example`, copied to `.ddev/docker-compose.mysql.yaml`. For PostgreSQL on a MySQL or MariaDB project, use `.ddev/drupal-dev/docker-compose.postgres.yaml.example`, copied to `.ddev/docker-compose.postgres.yaml`. Both keep their data in memory.
+
+### Faster runs: database in memory
+
+Kernel and functional tests spend most of their time creating and dropping tables. The add-on includes a second database container, testdb, that keeps its data in memory, which makes a typical kernel test class about three times faster. It runs the same database server as the project database, MySQL, MariaDB or PostgreSQL, and the project database doesn't get any test tables.
+
+testdb is behind a Docker Compose profile. Turn it on to keep it running for the project, or start it until the next restart:
+
+```bash
+ddev dotenv set .ddev/.env --compose-profiles=testdb && ddev restart
+ddev start --profiles=testdb
+```
+
+While testdb runs, `ddev phpunit` uses it by default, and `--no-memory` runs on the project database. `--memory` asks for it explicitly and says how to start it when it isn't running. With `--db` for another database type, `--memory` uses the separate container above for that type, and fails when that container keeps its data on disk. SQLite is in memory unless you pass `--no-memory`, and needs no setup. The data is gone on every restart, and memory use is capped at 1 GB per container and 256 MB for SQLite. See [Running tests](https://amateescu.github.io/ddev-drupal-dev/guides/testing/#faster-runs-database-in-memory) for details.
 
 ## Code quality checks
 

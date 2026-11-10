@@ -2,8 +2,8 @@
 
 #ddev-generated
 ## Description: Run PHPUnit tests
-## Usage: phpunit [--db=mysql|mariadb|sqlite|pgsql] [phpunit-args]
-## Example: "ddev phpunit core/modules/field" or "ddev phpunit --db=sqlite core/modules/node"
+## Usage: phpunit [--db=mysql|mariadb|sqlite|pgsql] [--memory|--no-memory] [phpunit-args]
+## Example: "ddev phpunit core/modules/field" or "ddev phpunit --memory core/modules/node" or "ddev phpunit --db=sqlite core/modules/node"
 
 set -e
 
@@ -15,51 +15,185 @@ export MSYS_NO_PATHCONV=1
 
 # Parse our flags, pass everything else through to PHPUnit.
 args=()
+DB=""
+# "on" for --memory, "off" for --no-memory, empty for neither. The last one
+# given wins.
+MEMORY=""
 for arg in "$@"; do
   case "$arg" in
     --db=*) DB="${arg#--db=}" ;;
+    --memory) MEMORY=on ;;
+    --no-memory) MEMORY=off ;;
     *) args+=("$arg") ;;
   esac
 done
 
+# The project's database type as a --db value: "mysql", "mariadb" or "pgsql".
+# DDEV_DATABASE looks like "mariadb:10.11" or "postgres:16". It tells MariaDB
+# and MySQL apart, which DDEV_DATABASE_FAMILY doesn't.
+case "$DDEV_DATABASE" in
+  postgres:*) project_db=pgsql ;;
+  *) project_db="${DDEV_DATABASE%%:*}" ;;
+esac
+
+# The extra database containers are addressed by their project-scoped names
+# because the bare service names also resolve to other projects' containers
+# over the shared ddev_default network.
+testdb_host="ddev-${DDEV_SITENAME}-testdb"
+
+# Exits successfully when the web container can connect to a server with the
+# db/db credentials. Takes the PDO driver ("mysql" or "pgsql") and the host.
+can_connect() {
+  ddev exec --raw -- php -r "new PDO('$1:host=$2;dbname=db', 'db', 'db');" >/dev/null 2>&1
+}
+
+# Exits successfully when a container keeps a directory on tmpfs, as a mount
+# of its own or inside one. Compose puts a service's tmpfs list in
+# HostConfig.Tmpfs and tmpfs volumes in Mounts.
+in_memory() {
+  local dir="${2%/}" mount
+  while read -r mount; do
+    mount="${mount%/}"
+    [ -n "$mount" ] || continue
+    case "$dir/" in
+      "$mount"/*) return 0 ;;
+    esac
+  done < <(docker inspect -f '{{range $dir, $opts := .HostConfig.Tmpfs}}{{println $dir}}{{end}}{{range .Mounts}}{{if eq .Type "tmpfs"}}{{println .Destination}}{{end}}{{end}}' "$1" 2>/dev/null)
+  return 1
+}
+
+# The testdb container's health ("healthy", "starting" or "unhealthy"), or
+# nothing when it isn't running. The container comes from
+# docker-compose.drupal-dev-testdb.yaml and only runs when its compose profile
+# is on. Docker answers this on the host, which is faster than a connection
+# test through 'ddev exec'.
+testdb_state="$(docker inspect -f '{{if .State.Running}}{{.State.Health.Status}}{{end}}' "$testdb_host" 2>/dev/null || true)"
+
+# While testdb runs, tests on the project's database type use it unless
+# --no-memory says otherwise. Turning its profile on is the opt-in.
+if [ -z "$MEMORY" ] && [ -n "$testdb_state" ] && { [ -z "$DB" ] || [ "$DB" = "$project_db" ]; }; then
+  MEMORY=default
+fi
+
+# The web container's default SIMPLETEST_DB is a MySQL URL, which works for
+# MySQL and MariaDB projects. A PostgreSQL project names its database instead.
+if [ -z "$DB" ] && [ "$project_db" = pgsql ]; then
+  DB=pgsql
+fi
+
+# Exits successfully for --memory, and for the default while testdb runs.
+memory_on() {
+  [ "$MEMORY" = on ] || [ "$MEMORY" = default ]
+}
+
+# Points SIMPLETEST_DB at the testdb container, or exits with how to start it.
+use_testdb() {
+  if [ "$testdb_state" = healthy ]; then
+    SIMPLETEST_DB="${driver}://db:db@${testdb_host}/db"
+    return
+  fi
+  if [ -n "$testdb_state" ]; then
+    echo "Error: The in-memory test database is not ready ($testdb_state). Try"
+    echo "again in a few seconds, see 'docker logs $testdb_host', or pass"
+    echo "--no-memory to run on the project database."
+    exit 1
+  fi
+  # Keep the profiles the project already turns on.
+  profiles="$(ddev dotenv get .ddev/.env --compose-profiles 2>/dev/null)" || profiles=""
+  case ",$profiles," in
+    *,testdb,*) ;;
+    ,,) profiles=testdb ;;
+    *) profiles="$profiles,testdb" ;;
+  esac
+  echo "Error: The in-memory test database is not running. To keep it on for"
+  echo "this project, which also makes it the default for 'ddev phpunit':"
+  echo
+  echo "  ddev dotenv set .ddev/.env --compose-profiles=$profiles && ddev restart"
+  echo
+  echo "To start it until the next restart, without restarting anything else:"
+  echo
+  echo "  ddev start --profiles=testdb"
+  exit 1
+}
+
+# Points SIMPLETEST_DB at the separate container for a database type other
+# than the project's, or exits with where to find its example. The examples
+# keep their data in memory, and --memory accepts only a container that does.
+# Sets on_tmpfs for one that does.
+use_container() {
+  local host="ddev-${DDEV_SITENAME}-${service}"
+  local example=".ddev/drupal-dev/docker-compose.${service}.yaml.example"
+  if ! can_connect "$driver" "$host"; then
+    echo "Error: $name is not available. Configure your project with"
+    echo "$service or add a separate $service container, see"
+    echo "$example."
+    exit 1
+  fi
+  # PostgreSQL images set their data directory in PGDATA, which differs
+  # between versions and setups.
+  if [ "$driver" = pgsql ]; then
+    datadir="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$host" 2>/dev/null | sed -n 's/^PGDATA=//p')"
+    datadir="${datadir:-/var/lib/postgresql/data}"
+  fi
+  if in_memory "$host" "$datadir"; then
+    on_tmpfs=1
+  elif [ "$MEMORY" = on ]; then
+    echo "Error: The $service container keeps its data on disk. For one with its"
+    echo "data in memory, see $example."
+    exit 1
+  fi
+  SIMPLETEST_DB="${driver}://db:db@${host}/db"
+}
+
+# --memory on its own, and the default while testdb runs, use the project's
+# database type.
+if memory_on && [ -z "$DB" ]; then
+  DB="$project_db"
+fi
+
 if [ -n "$DB" ]; then
+  # Set when the chosen database keeps its data in memory.
+  on_tmpfs=""
+  # The PDO driver, the name for messages, the compose service of the separate
+  # container, and its data directory for MySQL and MariaDB.
   case "$DB" in
-    mysql)   SIMPLETEST_DB="mysql://db:db@db/db" ;;
-    sqlite)  SIMPLETEST_DB="sqlite://localhost/sites/default/files/db.sqlite" ;;
-    pgsql)
-      if [ "$DDEV_DATABASE_FAMILY" = "postgres" ]; then
-        SIMPLETEST_DB="pgsql://db:db@db/db"
-      elif ddev exec --raw -- php -r "new PDO('pgsql:host=postgres;dbname=db', 'db', 'db');" >/dev/null 2>&1; then
-        SIMPLETEST_DB="pgsql://db:db@postgres/db"
-      else
-        echo "Error: PostgreSQL is not available. Configure your project with"
-        echo "postgres or add a separate postgres container."
-        exit 1
-      fi
-      ;;
-    mariadb)
-      # DDEV_DATABASE_FAMILY is "mysql" for MariaDB too, so check the type.
-      # The container is addressed by its project-scoped name because the bare
-      # service name also resolves to other projects' containers over the
-      # shared ddev_default network.
-      mariadb_host="ddev-${DDEV_SITENAME}-mariadb"
-      if [[ "$DDEV_DATABASE" == mariadb:* ]]; then
-        SIMPLETEST_DB="mysql://db:db@db/db"
-      elif ddev exec --raw -- php -r "new PDO('mysql:host=${mariadb_host};dbname=db', 'db', 'db');" >/dev/null 2>&1; then
-        SIMPLETEST_DB="mysql://db:db@${mariadb_host}/db"
-      else
-        echo "Error: MariaDB is not available. Configure your project with"
-        echo "mariadb or add a separate mariadb container, see"
-        echo ".ddev/drupal-dev/docker-compose.mariadb.yaml.example."
-        exit 1
-      fi
-      ;;
+    mysql) driver=mysql name=MySQL service=mysql datadir=/var/lib/mysql ;;
+    mariadb) driver=mysql name=MariaDB service=mariadb datadir=/var/lib/mysql ;;
+    pgsql) driver=pgsql name=PostgreSQL service=postgres ;;
+    sqlite) ;;
     *)
       echo "Error: Unknown database type '$DB'. Use mysql, mariadb, sqlite, or pgsql."
       exit 1
       ;;
   esac
-  echo "Using database: $DB"
+  if [ "$DB" = sqlite ]; then
+    # SQLite is in memory unless --no-memory, on the tmpfs mount from
+    # docker-compose.drupal-dev-sqlite.yaml. The double slash makes the path
+    # absolute. --no-memory puts the file in the files directory, relative to
+    # the Drupal root.
+    if [ "$MEMORY" = off ]; then
+      SIMPLETEST_DB="sqlite://localhost/sites/default/files/db.sqlite"
+    elif ! ddev exec --raw -- test -w /mnt/test-db >/dev/null 2>&1; then
+      echo "Error: The in-memory SQLite directory /mnt/test-db is missing."
+      echo "Run 'ddev restart' to add it."
+      exit 1
+    else
+      SIMPLETEST_DB="sqlite://localhost//mnt/test-db/db.sqlite"
+      on_tmpfs=1
+    fi
+  elif [ "$DB" = "$project_db" ] && memory_on; then
+    use_testdb
+    on_tmpfs=1
+  elif [ "$DB" = "$project_db" ]; then
+    SIMPLETEST_DB="${driver}://db:db@db/db"
+  else
+    use_container
+  fi
+  if [ -n "$on_tmpfs" ]; then
+    echo "Using database: $DB (in memory)"
+  else
+    echo "Using database: $DB"
+  fi
 fi
 
 # Clear stale webdriver sessions if Chrome is running. The script goes in over
@@ -86,8 +220,8 @@ case "$here/" in
   "$approot"/*) dir="$container_root${here#"$approot"}" ;;
 esac
 
-# Only override SIMPLETEST_DB when --db was specified; otherwise the container
-# default applies.
+# Only override SIMPLETEST_DB when a database was chosen above; otherwise the
+# container default applies.
 cmd=(phpunit -c "$container_root/${DDEV_DOCROOT:+$DDEV_DOCROOT/}core" "${args[@]}")
 [ -n "$DB" ] && cmd=(env "SIMPLETEST_DB=$SIMPLETEST_DB" "${cmd[@]}")
 # --raw runs the command directly. Without it ddev joins the arguments with
