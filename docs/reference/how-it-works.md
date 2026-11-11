@@ -13,9 +13,11 @@ The overlay also sets `minimum-stability: dev`, which core's development branche
 
 ## The Composer plugin
 
-The add-on ships a small Composer plugin, `drupal-dev/composer-git-installer`, with two jobs.
+The add-on ships a small Composer plugin, `drupal-dev/composer-git-installer`, with three jobs.
 
 **Keeping git checkouts.** It handles installs of `drupal-module`, `drupal-theme` and `drupal-profile` packages. If a git checkout (a clone or a worktree) already exists at the install path, it skips the download and registers the package as installed, so autoloading works and your checkout stays untouched. This is what lets [`ddev add-module`](../guides/contrib-modules.md) require a module without Composer replacing the clone.
+
+**Installing core from your checkout.** Core's `composer.json` declares `core/` and the plugins in `composer/Plugin/` as path repositories. Composer guesses a path package's version from the git branch, and on an issue branch that guess doesn't match the version core's `composer.lock` records. The plugin gives the root package and each of these path packages the version from core's `composer.lock`, so `drupal/core` and the `drupal/core-*` plugins always install from your checkout, never from Packagist.
 
 **Pinning core's versions.** When `extra.drupal-dev.pin-core-lock` is on, it filters the versions the solver can pick against core's `composer.lock`, so shared packages can only resolve to the versions core locked. See [Pinning core's locked versions](../guides/dependencies.md#pinning-cores-locked-versions).
 
