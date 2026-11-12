@@ -48,7 +48,13 @@ class Plugin implements PluginInterface, EventSubscriberInterface
             }
         }
 
-        $this->pinRootVersionFromCoreLock();
+        $locker = $this->loadCoreLock();
+        if ($locker !== null) {
+            $this->pinRootVersionFromCoreLock($locker);
+            if (!$this->rootIsCoreComposerFile()) {
+                $this->pinCorePathPackagesFromCoreLock($locker);
+            }
+        }
         $this->registerInstaller();
 
         $composer->getEventDispatcher()->addSubscriber(new CoreLockPinner($composer, $io));
@@ -61,6 +67,29 @@ class Plugin implements PluginInterface, EventSubscriberInterface
     public function onPreCommand(): void
     {
         $this->registerInstaller();
+    }
+
+    /**
+     * Load core's composer.lock, or return NULL when there is none.
+     */
+    private function loadCoreLock(): ?Locker
+    {
+        $lockFile = new JsonFile(getcwd() . '/composer.lock');
+        if (!$lockFile->exists()) {
+            return null;
+        }
+
+        $locker = new Locker($this->io, $lockFile, $this->composer->getInstallationManager(), '{}');
+        return $locker->isLocked() ? $locker : null;
+    }
+
+    /**
+     * Check whether Composer runs against core's composer.json instead of the
+     * overlay.
+     */
+    private function rootIsCoreComposerFile(): bool
+    {
+        return basename($this->composer->getConfig()->getConfigSource()->getName()) === 'composer.json';
     }
 
     /**
@@ -77,18 +106,8 @@ class Plugin implements PluginInterface, EventSubscriberInterface
      * composer version for the current branch/tag (dev-main, 11.x-dev,
      * 11.1.6, …), so we take it from there.
      */
-    private function pinRootVersionFromCoreLock(): void
+    private function pinRootVersionFromCoreLock(Locker $locker): void
     {
-        $lockFile = new JsonFile(getcwd() . '/composer.lock');
-        if (!$lockFile->exists()) {
-            return;
-        }
-
-        $locker = new Locker($this->io, $lockFile, $this->composer->getInstallationManager(), '{}');
-        if (!$locker->isLocked()) {
-            return;
-        }
-
         $package = $locker->getLockedRepository()->findPackage('drupal/core', '*');
         if (!$package) {
             return;
@@ -115,6 +134,53 @@ class Plugin implements PluginInterface, EventSubscriberInterface
             }
             $property = $reflection->getProperty($name);
             $property->setValue($root, $value);
+        }
+    }
+
+    /**
+     * Give core's path packages the versions recorded in core's composer.lock.
+     *
+     * Core's composer.json declares core/ and composer/Plugin/* as path
+     * repositories, and the merge plugin carries them into the overlay. Composer
+     * versions a path package with its VersionGuesser. On an issue branch that
+     * gives the branch name (dev-1234-fix) plus the nearest parent branch it
+     * finds, which can be a release branch like 12.0.x instead of main. Neither
+     * matches the root version that pinRootVersionFromCoreLock() sets, so
+     * Composer installs drupal/core and the core-* plugins from Packagist's
+     * main branch instead of the checkout.
+     *
+     * This adds a second path repository for each locked path package, set to
+     * its locked version. The merge plugin's copies end up ahead of these.
+     * Core declares them "canonical": false, so Composer keeps looking in
+     * later repositories. These copies are canonical, so Composer stops here
+     * and doesn't load drupal/core or the core-* plugins from Packagist. Their
+     * branch aliases (dev-main to 12.x-dev) still apply, because they come
+     * from each package's own composer.json.
+     *
+     * This is skipped when Composer runs against core's own composer.json. A
+     * path package's dist reference is a hash of its repository options, so
+     * the extra repositories would change the references in core's lock.
+     */
+    private function pinCorePathPackagesFromCoreLock(Locker $locker): void
+    {
+        $repositoryManager = $this->composer->getRepositoryManager();
+        $repositories = [];
+        foreach ($locker->getLockedRepository(true)->getPackages() as $package) {
+            if ($package instanceof AliasPackage || $package->getDistType() !== 'path') {
+                continue;
+            }
+            $url = $package->getDistUrl();
+            if ($url === null || !is_file(getcwd() . '/' . $url . '/composer.json')) {
+                continue;
+            }
+            $repositories[] = $repositoryManager->createRepository('path', [
+                'url' => $url,
+                'options' => ['versions' => [$package->getName() => $package->getPrettyVersion()]],
+            ]);
+        }
+
+        foreach (array_reverse($repositories) as $repository) {
+            $repositoryManager->prependRepository($repository);
         }
     }
 

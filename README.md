@@ -305,7 +305,8 @@ With DDEV's [shell completion](https://docs.ddev.com/en/stable/users/install/she
 3. The `COMPOSER` env var is set to `composer.local.json` inside the DDEV web container, so Composer reads the overlay instead of core's file.
 4. Result: a unified `vendor/` and autoloader with both core's deps and your extras, while core's `composer.json` and `composer.lock` remain untouched.
 5. A custom Composer plugin (`drupal-dev/composer-git-installer`) intercepts installs for `drupal-module`, `drupal-theme`, and `drupal-profile` packages. If a git checkout (including a worktree) already exists at the install path, the download is skipped and the package is registered in the installed repository so autoloading works correctly.
-6. When `extra.drupal-dev.pin-core-lock` is enabled, the same plugin subscribes to Composer's pre-pool-create event and filters the solver's candidate pool against core's `composer.lock`, so shared packages can only resolve to their locked versions.
+6. The same plugin gives the root package and core's path packages (`core/` and `composer/Plugin/*`) the versions from core's `composer.lock`, so `drupal/core` and the `drupal/core-*` plugins install from the checkout on any branch, including issue branches.
+7. When `extra.drupal-dev.pin-core-lock` is enabled, the same plugin subscribes to Composer's pre-pool-create event and filters the solver's candidate pool against core's `composer.lock`, so shared packages can only resolve to their locked versions.
 
 Only `composer.local.json` and `composer.local.lock` are written (both ignored via `.gitignore`).
 

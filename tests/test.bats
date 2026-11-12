@@ -106,6 +106,14 @@ reset_project() {
     docker rm -f "ddev-${PROJNAME}-postgres" >/dev/null 2>&1 || true
   fi
 
+  # "core path packages on an issue branch" renames core's 11.x branch to
+  # 3000000-test and deletes origin/11.x. Put both back, even when that test
+  # fails partway. Renaming keeps the branch's upstream config.
+  if git show-ref -q --verify refs/heads/3000000-test; then
+    git branch -q -m 3000000-test 11.x
+  fi
+  git update-ref refs/remotes/origin/11.x refs/heads/11.x
+
   # Restore core's tracked files and remove everything under modules/, where
   # tests put their modules and clones. The project root is not cleaned,
   # because without the add-on's .gitignore that would delete .ddev and vendor
@@ -1022,6 +1030,29 @@ d = json.load(open(p))
 d['config'].pop('platform')
 json.dump(d, open(p, 'w'), indent=4)
 "
+}
+
+@test "core path packages on an issue branch" {
+  set -eu -o pipefail
+
+  # On an issue branch, Composer versions core's path packages from the branch
+  # name and the nearest parent branch it can find. Rename the only branch this
+  # clone has and delete its remote copy, so there is no parent branch and the
+  # guess can't match the root version from core's lock.
+  git branch -q -m 11.x 3000000-test
+  git update-ref -d refs/remotes/origin/11.x
+
+  rm -f composer.local.lock
+  run ddev composer install
+  assert_success
+
+  # drupal/core and the core-* plugins come from the checkout, not Packagist.
+  run ddev composer show drupal/core
+  assert_success
+  assert_output --regexp 'dist +: \[path\] core'
+  run ddev composer show drupal/core-composer-scaffold
+  assert_success
+  assert_output --regexp 'dist +: \[path\] composer/Plugin/Scaffold'
 }
 
 # Runs last, because it leaves the add-on uninstalled and the next test would
