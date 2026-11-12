@@ -123,7 +123,12 @@ class CoreLockPinner implements EventSubscriberInterface
                 continue;
             }
             $matched[$name] = true;
-            if ($entry->isDev() && $package instanceof CompletePackage) {
+            // Path packages install from the checkout, so they keep the
+            // checkout's own reference. A path entry's reference in core's lock
+            // is a content hash, which can't be used to download a copy from
+            // Packagist either.
+            if ($entry->isDev() && $package instanceof CompletePackage
+                && $package->getDistType() !== 'path' && $entry->getDistType() !== 'path') {
                 $sourceRef = $entry->getSourceReference();
                 if ($sourceRef !== null) {
                     $package->setSourceReference($sourceRef);

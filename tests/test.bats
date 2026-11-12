@@ -106,15 +106,13 @@ reset_project() {
     docker rm -f "ddev-${PROJNAME}-postgres" >/dev/null 2>&1 || true
   fi
 
-  # "core path packages on an issue branch" hides core's 11.x branch under
-  # refs/hidden/. Put it back and switch to it, even when that test fails.
-  if git rev-parse -q --verify refs/hidden/11.x >/dev/null; then
-    git update-ref refs/heads/11.x refs/hidden/11.x
-    git update-ref refs/remotes/origin/11.x refs/hidden/11.x
-    git update-ref -d refs/hidden/11.x
-    git checkout -q 11.x
-    git branch -q -D 3000000-test
+  # "core path packages on an issue branch" renames core's 11.x branch to
+  # 3000000-test and deletes origin/11.x. Put both back, even when that test
+  # fails partway. Renaming keeps the branch's upstream config.
+  if git show-ref -q --verify refs/heads/3000000-test; then
+    git branch -q -m 3000000-test 11.x
   fi
+  git update-ref refs/remotes/origin/11.x refs/heads/11.x
 
   # Restore core's tracked files and remove everything under modules/, where
   # tests put their modules and clones. The project root is not cleaned,
@@ -1038,11 +1036,10 @@ json.dump(d, open(p, 'w'), indent=4)
   set -eu -o pipefail
 
   # On an issue branch, Composer versions core's path packages from the branch
-  # name and the nearest parent branch it can find. Hide the only parent branch
-  # this clone has, so the guess can't match the root version from core's lock.
-  git checkout -q -b 3000000-test
-  git update-ref refs/hidden/11.x refs/heads/11.x
-  git branch -q -D 11.x
+  # name and the nearest parent branch it can find. Rename the only branch this
+  # clone has and delete its remote copy, so there is no parent branch and the
+  # guess can't match the root version from core's lock.
+  git branch -q -m 11.x 3000000-test
   git update-ref -d refs/remotes/origin/11.x
 
   rm -f composer.local.lock

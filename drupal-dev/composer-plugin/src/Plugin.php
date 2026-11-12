@@ -51,7 +51,9 @@ class Plugin implements PluginInterface, EventSubscriberInterface
         $locker = $this->loadCoreLock();
         if ($locker !== null) {
             $this->pinRootVersionFromCoreLock($locker);
-            $this->pinCorePathPackagesFromCoreLock($locker);
+            if (!$this->rootIsCoreComposerFile()) {
+                $this->pinCorePathPackagesFromCoreLock($locker);
+            }
         }
         $this->registerInstaller();
 
@@ -68,6 +70,29 @@ class Plugin implements PluginInterface, EventSubscriberInterface
     }
 
     /**
+     * Load core's composer.lock, or return NULL when there is none.
+     */
+    private function loadCoreLock(): ?Locker
+    {
+        $lockFile = new JsonFile(getcwd() . '/composer.lock');
+        if (!$lockFile->exists()) {
+            return null;
+        }
+
+        $locker = new Locker($this->io, $lockFile, $this->composer->getInstallationManager(), '{}');
+        return $locker->isLocked() ? $locker : null;
+    }
+
+    /**
+     * Check whether Composer runs against core's composer.json instead of the
+     * overlay.
+     */
+    private function rootIsCoreComposerFile(): bool
+    {
+        return basename($this->composer->getConfig()->getConfigSource()->getName()) === 'composer.json';
+    }
+
+    /**
      * Pin the root package's version from drupal/core's entry in composer.lock.
      *
      * composer-merge-plugin substitutes 'self.version' in merged requirements
@@ -81,17 +106,6 @@ class Plugin implements PluginInterface, EventSubscriberInterface
      * composer version for the current branch/tag (dev-main, 11.x-dev,
      * 11.1.6, …), so we take it from there.
      */
-    private function loadCoreLock(): ?Locker
-    {
-        $lockFile = new JsonFile(getcwd() . '/composer.lock');
-        if (!$lockFile->exists()) {
-            return null;
-        }
-
-        $locker = new Locker($this->io, $lockFile, $this->composer->getInstallationManager(), '{}');
-        return $locker->isLocked() ? $locker : null;
-    }
-
     private function pinRootVersionFromCoreLock(Locker $locker): void
     {
         $package = $locker->getLockedRepository()->findPackage('drupal/core', '*');
@@ -135,10 +149,17 @@ class Plugin implements PluginInterface, EventSubscriberInterface
      * Composer installs drupal/core and the core-* plugins from Packagist's
      * main branch instead of the checkout.
      *
-     * Registering each locked path package first, at its locked version, keeps
-     * the checkout's copies in sync with the root version. Their branch aliases
-     * (dev-main to 12.x-dev) still apply, because they come from each
-     * package's own composer.json.
+     * This adds a second path repository for each locked path package, set to
+     * its locked version. The merge plugin's copies end up ahead of these.
+     * Core declares them "canonical": false, so Composer keeps looking in
+     * later repositories. These copies are canonical, so Composer stops here
+     * and doesn't load drupal/core or the core-* plugins from Packagist. Their
+     * branch aliases (dev-main to 12.x-dev) still apply, because they come
+     * from each package's own composer.json.
+     *
+     * This is skipped when Composer runs against core's own composer.json. A
+     * path package's dist reference is a hash of its repository options, so
+     * the extra repositories would change the references in core's lock.
      */
     private function pinCorePathPackagesFromCoreLock(Locker $locker): void
     {
