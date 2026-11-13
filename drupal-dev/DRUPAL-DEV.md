@@ -70,6 +70,7 @@ ddev phpstan core/modules/node         # PHPStan on specific paths
 ddev phpstan modules/contrib/token     # a contrib project, with its own configuration
 ddev phpcs core/modules/node           # coding standard checks
 ddev cspell core/modules/node/**       # spell checking (globs)
+ddev mago lint modules/contrib/token   # Mago, with the module's own mago.toml
 ```
 
 Each command uses the configuration of the project being checked, and core's for
@@ -88,7 +89,7 @@ ddev commit-code-check --branch 11.x   # changes compared to a branch
 
 ## Run tools from anywhere in the project
 
-`ddev phpunit`, `ddev phpcs`, `ddev phpstan` and `ddev cspell` take paths relative to the directory you run them from. Run them from the Drupal project root with the module path, e.g. `ddev phpcs modules/contrib/dashboard`, or from inside the module, e.g. `cd modules/contrib/dashboard && ddev phpcs src`. Each tool uses the module's own configuration. Without one, a module with a `.gitlab-ci.yml` gets the default configuration contrib CI uses, and anything else gets core's.
+`ddev phpunit`, `ddev phpcs`, `ddev phpstan`, `ddev cspell` and `ddev mago` take paths relative to the directory you run them from. Run them from the Drupal project root with the module path, e.g. `ddev phpcs modules/contrib/dashboard`, or from inside the module, e.g. `cd modules/contrib/dashboard && ddev phpcs src`. Each tool uses the module's own configuration. Without one, a module with a `.gitlab-ci.yml` gets the default configuration contrib CI uses, and anything else gets core's.
 
 ## Pin core's exact dependency versions
 

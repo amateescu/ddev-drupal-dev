@@ -620,6 +620,92 @@ EOF
   assert_output "project/drupal"
 }
 
+@test "mago" {
+  set -eu -o pipefail
+
+  run ddev mago lint
+  assert_failure
+  assert_output --partial "Mago is not installed"
+
+  # A stand-in for Mago that prints the directory it runs in and its arguments,
+  # one per line.
+  mkdir -p "${TESTDIR}/vendor/bin"
+  printf '#!/usr/bin/env bash\npwd\nprintf "%%s\\n" "$@"\n' > "${TESTDIR}/vendor/bin/mago"
+  chmod +x "${TESTDIR}/vendor/bin/mago"
+
+  # Commands that don't read a project's files are handed over as they are.
+  run ddev mago --version
+  assert_success
+  assert_output "$(printf '/var/www/html\n--version')"
+
+  # A project's own configuration is used from anywhere, with the project's
+  # directory as the workspace and the paths as absolute ones.
+  local project="${TESTDIR}/modules/custom/magotest"
+  mkdir -p "${project}/src"
+  printf '[source]\npaths = ["."]\n' > "${project}/mago.toml"
+  touch "${project}/src/Example.php"
+  run ddev mago lint --fix modules/custom/magotest/src
+  assert_success
+  assert_output "$(printf '/var/www/html\n--workspace\n/var/www/html/modules/custom/magotest\nlint\n--fix\n/var/www/html/modules/custom/magotest/src')"
+
+  # In the project's directory Mago finds the configuration itself.
+  cd "${project}"
+  run ddev mago lint
+  assert_success
+  assert_output "$(printf '/var/www/html/modules/custom/magotest\nlint')"
+
+  # Below it, a run without paths checks the current directory.
+  cd "${project}/src"
+  run ddev mago lint
+  assert_success
+  assert_output "$(printf '/var/www/html/modules/custom/magotest/src\n--workspace\n/var/www/html/modules/custom/magotest\nlint\n/var/www/html/modules/custom/magotest/src')"
+  run ddev mago list-files
+  assert_success
+  assert_output "$(printf '/var/www/html/modules/custom/magotest/src\n--workspace\n/var/www/html/modules/custom/magotest\nlist-files')"
+  cd "${TESTDIR}"
+
+  # A run that names a configuration is left alone.
+  run ddev mago --config modules/custom/magotest/mago.toml lint
+  assert_success
+  assert_output "$(printf '/var/www/html\n--config\nmodules/custom/magotest/mago.toml\nlint')"
+
+  # Paths without a configuration are handed over as they are, in a run of
+  # their own.
+  run ddev mago lint modules/custom/magotest/src core/lib/Drupal.php
+  assert_success
+  assert_output --partial "Running with modules/custom/magotest/mago.toml"
+  assert_output --partial "Running without a configuration"
+  assert_output --partial "core/lib/Drupal.php"
+
+  # A configuration written for contrib CI names drupal/mago in the project's
+  # own vendor directory, which needs the package in the site.
+  printf 'extends = "vendor/drupal/mago/drupal.mago.toml"\n\n[source]\npaths = ["."]\nincludes = ["vendor", "web"]\n' > "${project}/mago.toml"
+  run ddev mago lint modules/custom/magotest
+  assert_failure
+  assert_output --partial "modules/custom/magotest/mago.toml needs drupal/mago"
+
+  # With the package there, the project gets a written configuration that
+  # extends its own through a link, next to a link to the site's vendor
+  # directory. It lists the code around the project and not the project itself.
+  mkdir -p "${TESTDIR}/vendor/drupal/mago" "${TESTDIR}/modules/custom/other"
+  run ddev mago lint modules/custom/magotest
+  assert_success
+  assert_output "$(printf '/var/www/html\n--config\n/tmp/drupal-dev-mago/modules-custom-magotest/mago.toml\n--workspace\n/var/www/html/modules/custom/magotest\nlint\n/var/www/html/modules/custom/magotest')"
+  run ddev exec 'cat /tmp/drupal-dev-mago/modules-custom-magotest/mago.toml && readlink /tmp/drupal-dev-mago/modules-custom-magotest/project.toml /tmp/drupal-dev-mago/modules-custom-magotest/vendor'
+  assert_success
+  assert_output --partial 'extends = "project.toml"'
+  assert_output --partial '    "/var/www/html/vendor",'
+  assert_output --partial '    "/var/www/html/core",'
+  assert_output --partial '    "/var/www/html/modules/custom/other",'
+  refute_output --partial '    "/var/www/html/modules/custom/magotest",'
+  refute_output --partial '"/var/www/html/modules",'
+  assert_output --partial 'working-directory = "/var/www/html/modules/custom/magotest"'
+  assert_output --partial '"/var/www/html/vendor/drupal/mago/resources/worker.php"]'
+  assert_output --partial "$(printf '/var/www/html/modules/custom/magotest/mago.toml\n/var/www/html/vendor')"
+
+  rm -rf "${TESTDIR}/modules/custom" "${TESTDIR}/vendor/bin/mago" "${TESTDIR}/vendor/drupal/mago"
+}
+
 # bats test_tags=release
 @test "install from release" {
   set -eu -o pipefail

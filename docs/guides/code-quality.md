@@ -73,6 +73,43 @@ cspell also gets what contrib CI adds to every project's configuration: the modu
 
 `_PHPCS_EXTRA`, `_PHPSTAN_EXTRA` and `_CSPELL_EXTRA` are not applied.
 
+## Mago
+
+`ddev mago` runs [Mago](https://mago.carthage.software) with the configuration of the project being checked. Install it first, with the Drupal rules from [drupal/mago](https://www.drupal.org/project/mago):
+
+```bash
+ddev composer require --dev carthage-software/mago "drupal/mago:^1.0@alpha"
+```
+
+```bash
+ddev mago lint modules/contrib/token   # the module's own mago.toml
+cd modules/contrib/token
+ddev mago analyze                      # what the module's mago.toml lists
+ddev mago format --check src           # the module's src directory
+```
+
+Mago only looks for a `mago.toml` in the directory it runs from. `ddev mago` takes the nearest `mago.toml` or `mago.dist.toml` in the checked path or a parent directory, and runs Mago with that project as its workspace. Paths that belong to several projects are checked one project at a time. A run that passes `--config` or `--workspace` is left alone.
+
+### A configuration written for contrib CI
+
+A contrib project's `mago.toml` is written for the layout of contrib CI, where Composer installs into the project's directory and the site is in `web`:
+
+```toml
+extends = "vendor/drupal/mago/drupal.mago.toml"
+
+[source]
+paths = ["."]
+includes = ["vendor", "web"]
+```
+
+Here the project sits inside the site, so it doesn't have a `vendor` directory. `ddev mago` makes the same file work without changing it. It writes a configuration under `/tmp/drupal-dev-mago` in the container that:
+
+- extends the project's file through a link, next to a link to the site's `vendor` directory, so the path to `drupal/mago` works
+- lists `vendor`, core and every other module, theme and profile under `includes`, for the analyzer to read
+- starts the `drupal/mago` worker in the project's directory
+
+`mago analyze` warns about the project's own `includes` that don't exist here.
+
 ## Checking a change before committing
 
 `ddev commit-code-check` runs core's `core/scripts/dev/commit-code-check.sh`. It checks only the files you changed, with cspell, PHP CodeSniffer, PHPStan, ESLint, Stylelint and a few file checks (file modes, no changes in `vendor/` or `core/node_modules/`):
