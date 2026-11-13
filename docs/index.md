@@ -38,7 +38,7 @@ See [Getting started](getting-started.md) for the details.
 - [Merge requests](guides/merge-requests.md): check out a drupal.org merge request with one command.
 - [Dependencies](guides/dependencies.md): add packages, pin core's locked versions.
 - [Running tests](guides/testing.md): PHPUnit against MySQL, MariaDB, PostgreSQL or SQLite, and browser tests.
-- [Code quality](guides/code-quality.md): PHPStan, PHP CodeSniffer, cspell and core's pre-commit checks.
+- [Code quality](guides/code-quality.md): PHPStan, PHP CodeSniffer, cspell, Mago and core's pre-commit checks.
 - [Working from the host](guides/host.md): shell helpers, direnv and tab completion.
 - [Commands](reference/commands.md): every command and option.
 

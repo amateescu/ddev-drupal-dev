@@ -10,6 +10,7 @@
 | [`ddev phpunit`](#ddev-phpunit) | Run PHPUnit tests |
 | [`ddev phpstan`](#ddev-phpstan) | Run PHPStan with the configuration of the checked project |
 | [`ddev phpcs`](#ddev-phpcs) | Run PHP CodeSniffer with the standard of the checked project |
+| [`ddev mago`](#ddev-mago) | Run Mago with the configuration of the checked project |
 | [`ddev cspell`](#ddev-cspell) | Run cspell with the configuration of the checked project |
 | [`ddev commit-code-check`](#ddev-commit-code-check) | Run core's pre-commit checks on your changed files |
 
@@ -115,6 +116,14 @@ ddev phpcs [phpcs arguments] [paths]
 ```
 
 Runs PHP CodeSniffer with the coding standard of the project each path belongs to. Without paths, checks the current directory.
+
+## `ddev mago`
+
+```
+ddev mago [command] [mago arguments] [paths]
+```
+
+Runs Mago with the `mago.toml` of the project each path belongs to. Without paths, checks the current directory. A contrib project's file that names `vendor/drupal/mago` works without changes. See [Mago](../guides/code-quality.md#mago).
 
 ## `ddev cspell`
 

@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+
+#ddev-generated
+## Description: Run Mago with the configuration of the project being checked
+## Usage: mago [command] [flags] [paths]
+## Example: "ddev mago lint modules/contrib/token", "ddev mago analyze" or "ddev mago format --check src"
+## ExecRaw: true
+## HostWorkingDir: true
+
+# ExecRaw keeps the arguments as they came in; without it ddev joins them and a
+# shell in the container splits them again, turning a path with a space into two.
+# HostWorkingDir runs the command in the directory it was started from on the
+# host, so paths are relative to that directory.
+
+. /mnt/ddev_config/drupal-dev/web-command-helpers.sh || exit 1
+
+docroot="$DDEV_APPROOT${DDEV_DOCROOT:+/$DDEV_DOCROOT}"
+
+mago=("$DDEV_APPROOT/vendor/bin/mago")
+if [ ! -x "${mago[0]}" ]; then
+  echo "Mago is not installed. Run: ddev composer require --dev carthage-software/mago \"drupal/mago:^1.0@alpha\"" >&2
+  exit 1
+fi
+
+# Only the commands that read a project's files get a configuration from here.
+# A run that names a configuration or a workspace itself is left alone too.
+command=""
+for arg in "$@"; do
+  case "$arg" in
+    --config | --config=* | --workspace | --workspace=*) exec "${mago[@]}" "$@" ;;
+    lint | analyze | format | fix | guard | list-files | config | extension)
+      [ -n "$command" ] || command="$arg"
+      ;;
+  esac
+done
+[ -n "$command" ] || exec "${mago[@]}" "$@"
+
+# Echoes the Mago configuration that covers a path, or "-" when there is none.
+# Mago itself only looks in the directory it runs from.
+mago_config() {
+  local config
+  config=$(config_for "$1" mago.toml mago.dist.toml)
+  echo "${config:--}"
+}
+
+# Echoes a string as a TOML basic string.
+toml_string() {
+  local value="${1//\\/\\\\}"
+  printf '"%s"' "${value//\"/\\\"}"
+}
+
+# Echoes the directories that hold the code around a project, one per line:
+# the vendor directory, core and every other extension. The analyzer reads them
+# for their classes and functions. A directory that holds the project is
+# replaced by the directories in it, because Mago's linter and formatter skip
+# everything under an included directory.
+includes_for() {
+  local project="$1" path child
+  local -a queue=("$DDEV_APPROOT/vendor" "$docroot/core" "$docroot/modules" "$docroot/themes" "$docroot/profiles")
+
+  while [ "${#queue[@]}" -gt 0 ]; do
+    path="${queue[0]}"
+    queue=("${queue[@]:1}")
+    [ -d "$path" ] || continue
+    case "$project" in
+      "$path") ;;
+      "$path"/*)
+        for child in "$path"/*/; do
+          [ -d "$child" ] && queue+=("${child%/}")
+        done
+        ;;
+      *) echo "$path" ;;
+    esac
+  done
+}
+
+# Writes the configuration for a project whose own file is written for contrib
+# CI, and echoes its path. Such a file names drupal/mago and the code around
+# the project with paths from the project's directory: vendor/drupal/mago,
+# vendor and web. Composer installed into that directory in CI. Here the
+# project sits inside the site, so those paths lead nowhere.
+#
+# The written file sits in a directory of its own, next to a link to the
+# project's file and a link to the site's vendor directory. It extends the
+# first link. Mago resolves the paths in a file from the directory of the file,
+# links included, so the project's path to drupal/mago works through the second
+# link. The written file also lists the code around the project and starts the
+# drupal/mago worker in the project's directory.
+site_config() {
+  local config="$1" project slot path
+  project=$(dirname "$config")
+  slot="${TMPDIR:-/tmp}/drupal-dev-mago/$(realpath -sm --relative-to="$DDEV_APPROOT" "$project" | tr / -)"
+
+  mkdir -p "$slot"
+  ln -sfn "$config" "$slot/project.toml"
+  ln -sfn "$DDEV_APPROOT/vendor" "$slot/vendor"
+  {
+    echo 'extends = "project.toml"'
+    echo
+    echo '[source]'
+    echo 'includes = ['
+    while IFS= read -r path; do
+      echo "    $(toml_string "$path"),"
+    done < <(includes_for "$project")
+    echo ']'
+    echo
+    echo '[extension-hosts.drupal]'
+    echo "working-directory = $(toml_string "$project")"
+    echo "command = [\"php\", \"-d\", \"xdebug.mode=off\", \"-d\", \"pcov.enabled=0\", $(toml_string "$DDEV_APPROOT/vendor/drupal/mago/resources/worker.php")]"
+  } > "$slot/mago.toml"
+
+  echo "$slot/mago.toml"
+}
+
+# Fills OPTIONS with the options that make Mago use a configuration.
+mago_options() {
+  local config="$1" project
+  OPTIONS=()
+  [ "$config" != - ] || return 0
+  project=$(dirname "$config")
+
+  if grep -q 'vendor/drupal/mago' "$config" && [ ! -d "$project/vendor/drupal/mago" ]; then
+    if [ ! -d "$DDEV_APPROOT/vendor/drupal/mago" ]; then
+      echo "$(shown_path "$config") needs drupal/mago. Run: ddev composer require --dev \"drupal/mago:^1.0@alpha\"" >&2
+      exit 1
+    fi
+    OPTIONS=(--config "$(site_config "$config")" --workspace "$project")
+  elif [ ! . -ef "$project" ]; then
+    OPTIONS=(--workspace "$project")
+  fi
+}
+
+# Mago takes paths, not globs, so expand any glob that came in whole before
+# working out which project the paths belong to.
+expand_globs "$@"
+set -- "${ARGS[@]}"
+
+split_args "--php-version|--threads|--colors|--explain|-o|--only|--baseline|--reporting-target|--reporting-format|-m|--minimum-fail-level|--minimum-report-level|--retain-code|--substitute|--slow-file-warning-threshold-ms|--stdin-filepath" "$@"
+
+# A run without paths checks the directory it was started from. In the
+# directory of a configuration that is what the configuration lists. The
+# commands that don't take paths always work on what the configuration lists.
+if [ "${#PATHS[@]}" -eq 0 ]; then
+  config=$(mago_config .)
+  case "$command" in
+    list-files | config | extension) whole=1 ;;
+    *) whole="" ;;
+  esac
+  if [ -n "$whole" ] || [ "$config" = - ] || [ . -ef "$(dirname "$config")" ]; then
+    mago_options "$config"
+    exec "${mago[@]}" "${OPTIONS[@]}" "$@"
+  fi
+  PATHS=(.)
+fi
+
+# The paths can belong to several projects, so run each configuration in turn
+# and fail if any of the runs does. Mago reads a path from its workspace, which
+# is the project's directory, so the paths are handed over as absolute ones.
+group_paths mago_config
+status=0
+for config in "${CONFIGS[@]}"; do
+  mago_options "$config"
+  mapfile -t group < <(paths_of "$config")
+  if [ "${#OPTIONS[@]}" -gt 0 ]; then
+    for i in "${!group[@]}"; do
+      group[i]=$(realpath -sm "${group[i]}")
+    done
+  fi
+
+  if [ "${#CONFIGS[@]}" -eq 1 ]; then
+    exec "${mago[@]}" "${OPTIONS[@]}" "${FLAGS[@]}" "${group[@]}"
+  fi
+
+  [ "$config" = - ] && echo "Running without a configuration" || echo "Running with $(shown_path "$config")"
+  "${mago[@]}" "${OPTIONS[@]}" "${FLAGS[@]}" "${group[@]}" || status=$?
+done
+
+exit $status

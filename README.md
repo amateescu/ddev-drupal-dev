@@ -235,6 +235,18 @@ Everything else without a configuration of its own falls back to core's. `_PHPCS
 
 `ddev phpstan` analyses against the PHP version core declares in `config.platform`, not the container's runtime version, so results match what core's CI reports.
 
+### Mago
+
+`ddev mago` runs [Mago](https://mago.carthage.software) with the nearest `mago.toml` in the checked path or a parent directory. Install it with `ddev composer require --dev carthage-software/mago "drupal/mago:^1.0@alpha"`.
+
+```bash
+ddev mago lint modules/contrib/token   # the module's own mago.toml
+cd modules/contrib/token
+ddev mago analyze                      # what the module's mago.toml lists
+```
+
+A contrib project's `mago.toml` that extends `vendor/drupal/mago/drupal.mago.toml` is written for contrib CI, where Composer installs into the project's directory. `ddev mago` makes it work inside the site without changing it. See [Mago](https://amateescu.github.io/ddev-drupal-dev/guides/code-quality/#mago) for details.
+
 ### Checking a change before committing
 
 `ddev commit-code-check` runs core's own `core/scripts/dev/commit-code-check.sh`, which checks *only the files you changed* with cspell, PHPCS, PHPStan, ESLint, Stylelint and a few file checks (file modes, no `vendor/` or `core/node_modules/` changes):
@@ -288,6 +300,7 @@ This sets the `COMPOSER` env var on the host so that running `composer` directly
 | `ddev phpunit [path]` | Run PHPUnit tests |
 | `ddev phpstan [paths]` | Run PHPStan with the configuration of the checked project |
 | `ddev phpcs [paths]` | Run PHP CodeSniffer with the standard of the checked project |
+| `ddev mago [command] [paths]` | Run Mago with the configuration of the checked project |
 | `ddev cspell [globs]` | Run cspell with the configuration and words of the checked project |
 | `ddev commit-code-check [flags]` | Run core's pre-commit checks on your changed files |
 | `ddev add-module <name>` | Clone a contrib module for development |
